@@ -82,13 +82,14 @@
     staff_extender:()=>({data:null,error:null}),staff_reintento:()=>({data:null,error:null}),
     staff_crear_turno:a=>{const s=DB.servicios.find(x=>x.id===a.p_servicio);let c=a.p_cliente?DB.clientes.find(x=>x.id===a.p_cliente):null;if(!c){c={id:uid(),nombre:a.p_nombre,tel:"549"+a.p_tel.replace(/\D/g,"").slice(-10),email:"",notas:"",credito:0,token:uid(),created_at:new Date().toISOString()};DB.clientes.push(c);}
       const t={id:uid(),cliente_id:c.id,servicio_id:s.id,servicio_nombre:s.nombre,profesional_id:a.p_profesional,equipo:s.equipo,duracion:s.duracion,preparacion:s.preparacion,precio:s.precio,sena_monto:0,fecha:a.p_fecha,hora:a.p_hora+":00",estado:"confirmado",medio:"panel",origen:"panel",recordado:false,a_favor:0,token:uid(),created_at:new Date().toISOString()};DB.turnos.push(t);return {data:t.id,error:null};},
+    admin_reiniciar:a=>{if(a.p_confirmacion!=="BORRAR")return err("Escribí BORRAR para confirmar");const r={turnos:DB.turnos.length,clientes:DB.clientes.length,catalogo:a.p_catalogo};["notifs","espera","pagos","ventas","turnos","paquetes","clientes"].forEach(k=>DB[k]=[]);if(a.p_catalogo){DB.bloqueos=[];DB.servicios=[];DB.profesionales=[];}return {data:r,error:null};},
     staff_vender_paquete:a=>{const s=DB.servicios.find(x=>x.id===a.p_servicio);const k={id:uid(),cliente_id:a.p_cliente,servicio_id:s.id,nombre:s.nombre,total:a.p_sesiones,usadas:0,created_at:new Date().toISOString()};DB.paquetes.push(k);DB.ventas.push({id:uid(),cliente_id:a.p_cliente,concepto:"Paquete",monto:a.p_precio,medio:a.p_medio,fecha:ymd(new Date())});return {data:k.id,error:null};}
   };
   window.supabase={createClient(){return {
     from:Q,
     rpc(fn,args){return Promise.resolve(R[fn]?R[fn](args||{}):err("rpc desconocida "+fn));},
     auth:{getSession:async()=>({data:{session}}),signInWithPassword:async({email,password})=>{if(password!=="clave123")return {data:null,error:{message:"Invalid login credentials"}};const u={id:"admin-1",email};session={user:u};DB.staff=[{user_id:"admin-1",rol:"admin",profesional_id:null,nombre:"Admin"}];return {data:{session},error:null};},signOut:async()=>{session=null;}},
-    storage:{from(){return {upload:async()=>({data:{},error:null}),createSignedUrl:async()=>({data:{signedUrl:"data:image/gif;base64,R0lGODlhAQABAAAAACw="},error:null})};}},
+    storage:{from(){return {upload:async()=>({data:{},error:null}),remove:async()=>({data:[],error:null}),getPublicUrl:(p)=>({data:{publicUrl:"data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"}}),createSignedUrl:async()=>({data:{signedUrl:"data:image/gif;base64,R0lGODlhAQABAAAAACw="},error:null})};}},
     channel(){const c={on(){return c;},subscribe(){return c;}};return c;}
   };}};
 })();

@@ -264,3 +264,12 @@ tr.click{cursor:pointer} tr.click:hover td{background:var(--sunk)}
 .linkbox{display:flex;gap:8px;align-items:center;background:var(--sunk);border-radius:8px;padding:10px 12px;flex-wrap:wrap}
 .linkbox code{font-family:var(--f-mono);font-size:.8rem;overflow-wrap:anywhere;flex:1 1 220px;min-width:0}
 .busy{opacity:.6;pointer-events:none}
+
+/* logo de la marca */
+.mark.logo{background:transparent;width:auto;min-width:34px;max-width:132px;height:38px;padding:0;border-radius:0}
+.mark.logo img{height:38px;width:auto;max-width:132px;object-fit:contain;display:block}
+.logo-edit{display:flex;gap:14px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:14px}
+.logo-prev{width:96px;height:72px;border:1px dashed var(--line);border-radius:8px;display:grid;place-items:center;background:var(--sunk);flex:none;overflow:hidden}
+.logo-prev img{max-width:88px;max-height:64px;object-fit:contain}
+.peligro{border-color:var(--bad-soft)}
+.peligro h3{color:var(--bad)}

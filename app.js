@@ -93,8 +93,8 @@ function quitarToken(tk){try{localStorage.setItem(TOKENS_KEY,JSON.stringify(leer
 const linkMis=tk=>location.origin+location.pathname+"#mis-"+tk;
 
 /* ---------- datos: mapeo de filas ---------- */
-const CFG_COLS={negocio:"negocio",whatsapp:"whatsapp",alias:"alias",cbu:"cbu",titular:"titular",banco:"banco",mpLink:"mp_link",exigirSena:"exigir_sena",cancelMin:"cancel_min",senaHoras:"sena_horas",politica:"politica",ventana:"ventana",anticipacion:"anticipacion",holdHoras:"hold_horas",intervalo:"intervalo",recordatorioHoras:"recordatorio_horas",mensaje:"mensaje",mensajeConfirmacion:"mensaje_confirmacion"};
-function mapConfig(r){const c={mpActivo:false};Object.keys(CFG_COLS).forEach(k=>{c[k]=r[CFG_COLS[k]];});return c;}
+const CFG_COLS={negocio:"negocio",whatsapp:"whatsapp",alias:"alias",cbu:"cbu",titular:"titular",banco:"banco",mpLink:"mp_link",exigirSena:"exigir_sena",cancelMin:"cancel_min",senaHoras:"sena_horas",politica:"politica",ventana:"ventana",anticipacion:"anticipacion",holdHoras:"hold_horas",intervalo:"intervalo",recordatorioHoras:"recordatorio_horas",mensaje:"mensaje",mensajeConfirmacion:"mensaje_confirmacion",logoUrl:"logo_url"};
+function mapConfig(r){const c={mpActivo:false};Object.keys(CFG_COLS).forEach(k=>{c[k]=r[CFG_COLS[k]];});c.logoUrl=c.logoUrl||"";return c;}
 function normH(h){const o={};for(let i=0;i<7;i++)o[i]=Array.isArray(h&&h[i])?h[i]:[];return o;}
 const mapPro=r=>({id:r.id,nombre:r.nombre,rol:r.rol||"",tel:r.tel||"",color:r.color||1,activo:r.activo,archivado:!!r.archivado,horario:normH(r.horario),orden:r.orden||0});
 const SVC_COLS={nombre:"nombre",categoria:"categoria",desc:"descripcion",duracion:"duracion",preparacion:"preparacion",precio:"precio",sena:"sena",activo:"activo",equipo:"equipo",restringir:"restringir",desde:"desde",hasta:"hasta",profIds:"prof_ids",dias:"dias"};
@@ -840,7 +840,10 @@ function vAjustes(){
   const c=S.config;
   const txt=(k,l,type,help,ph)=>`<label class="f"><span>${l}${help?` <small>${help}</small>`:""}</span><input type="${type||"text"}" id="cfg_${k}" data-c="cfg" data-k="${k}" value="${esc(c[k])}" ${ph?`placeholder="${esc(ph)}"`:""}></label>`;
   return `<div class="stack"><h2>Ajustes</h2>
-    <section class="panel stack"><h3>Centro</h3><div class="fgrid">${txt("negocio","Nombre del centro")}${txt("whatsapp","WhatsApp del centro","tel","Con código de país")}</div></section>
+    <section class="panel stack"><h3>Centro</h3><div class="fgrid">${txt("negocio","Nombre del centro")}${txt("whatsapp","WhatsApp del centro","tel","Con código de país")}</div>
+      <div class="logo-edit"><div class="logo-prev">${c.logoUrl?`<img src="${esc(c.logoUrl)}" alt="Logo actual">`:`<span class="mark">${esc((c.negocio.trim()[0]||"T").toUpperCase())}</span>`}</div>
+        <div class="stack" style="gap:6px;min-width:0"><b>Logo</b><span class="small muted">PNG, JPG o WEBP de hasta 2 MB. Mejor con fondo transparente. Se muestra junto al nombre en la página de reservas y en el panel.</span>
+          <div class="row"><label class="btn sm" for="logoFile">${c.logoUrl?"Cambiar logo":"Subir logo"}</label><input type="file" id="logoFile" accept="image/png,image/jpeg,image/webp" data-c="logo" hidden>${c.logoUrl?(ui.confirm==="logoDel"?`<span class="small">¿Quitar el logo?</span><button class="btn sm danger" data-a="logoDel">Sí, quitar</button><button class="btn sm" data-a="noConfirm">No</button>`:`<button class="btn sm ghost" data-a="ask" data-v="logoDel">Quitar logo</button>`):""}${ui.busy?'<span class="small muted">Subiendo…</span>':""}</div></div></div></section>
     <section class="panel stack"><h3>Cobro de señas</h3>
       <div class="fgrid">${txt("alias","Alias")}${txt("cbu","CBU / CVU")}${txt("titular","Titular de la cuenta")}${txt("banco","Banco o billetera")}</div>
       <label class="switch"><input type="checkbox" id="cfg_exigir" data-c="cfg" data-k="exigirSena" data-b="1" ${c.exigirSena?"checked":""}>Exigir seña para confirmar el turno</label>
@@ -854,10 +857,24 @@ function vAjustes(){
       <p class="small muted">Variables: {nombre} {servicio} {profesional} {fecha} {hora} {negocio} {cancelacion} {saldo}</p>
       <label class="f">Recordatorio del turno<textarea id="cfg_msg" data-c="cfg" data-k="mensaje">${esc(c.mensaje)}</textarea></label>
       <label class="f">Confirmación de seña<textarea id="cfg_msg2" data-c="cfg" data-k="mensajeConfirmacion">${esc(c.mensajeConfirmacion)}</textarea></label></section>
-    <section class="panel stack"><h3>Acceso del personal</h3><p class="small muted">Los usuarios del centro se crean en Supabase (Authentication → Users) y después se habilitan como administración o profesional. Pedíselo a quien administra el sistema.</p></section></div>`;
+    <section class="panel stack"><h3>Acceso del personal</h3><p class="small muted">Los usuarios del centro se crean en Supabase (Authentication → Users) y después se habilitan como administración o profesional. Pedíselo a quien administra el sistema.</p></section>
+    <section class="panel stack peligro"><div><h3>Empezar de cero</h3><p class="small muted">Para dejar el sistema limpio después de las pruebas. No se puede deshacer.</p></div>
+      <form class="stack" data-f="reinicio">
+        <label class="opt"><input type="radio" name="alcance" value="mov" checked><span><b>Solo movimientos</b><br><span class="small muted">Borra turnos, clientes, pagos, señas, comprobantes, paquetes, lista de espera y novedades. Mantiene profesionales, tratamientos, horarios y ajustes.</span></span></label>
+        <label class="opt"><input type="radio" name="alcance" value="todo"><span><b>Todo</b><br><span class="small muted">Lo anterior más profesionales, tratamientos y bloqueos. Mantiene los ajustes del centro, el logo y los usuarios del personal.</span></span></label>
+        <label class="f"><span>Para confirmar, escribí <b class="mono">BORRAR</b></span><input type="text" id="reinicioConf" autocomplete="off" style="max-width:220px"></label>
+        <div class="row"><button class="btn danger" type="submit" ${ui.busy?"disabled":""}>${ui.busy?"Borrando…":"Borrar definitivamente"}</button></div></form></section></div>`;
 }
 
 /* ---------- render ---------- */
+let faviconActual=null;
+function ponerFavicon(url){
+  if(url===faviconActual)return;faviconActual=url;
+  let l=document.querySelector('link[rel="icon"]');
+  if(!url){if(l)l.remove();return;}
+  if(!l){l=document.createElement("link");l.rel="icon";document.head.appendChild(l);}
+  l.href=url;
+}
 function render(){
   if(!S.config){return;}
   dispCache=null;
@@ -865,7 +882,10 @@ function render(){
   document.title=(ui.mode==="pro"?"Panel · ":"Turnos · ")+S.config.negocio;
   const pa=prosActivos();
   document.getElementById("bizSub").textContent=pa.length>1?pa.length+" profesionales":(pa[0]||{nombre:""}).nombre;
-  document.getElementById("mark").textContent=(S.config.negocio.trim()[0]||"T").toUpperCase();
+  const mk=document.getElementById("mark");
+  if(S.config.logoUrl){if(mk.dataset.logo!==S.config.logoUrl){mk.innerHTML=`<img src="${esc(S.config.logoUrl)}" alt="">`;mk.dataset.logo=S.config.logoUrl;}mk.classList.add("logo");}
+  else{mk.classList.remove("logo");mk.dataset.logo="";mk.textContent=(S.config.negocio.trim()[0]||"T").toUpperCase();}
+  ponerFavicon(S.config.logoUrl);
   document.getElementById("modeSeg").hidden=!ui.yo;
   document.getElementById("mCli").setAttribute("aria-pressed",ui.mode==="cliente");
   document.getElementById("mPro").setAttribute("aria-pressed",ui.mode==="pro");
@@ -1011,6 +1031,7 @@ const A={
   svcOpen:v=>{ui.svcOpen=v||null;ui.confirm=null;},
   svcDel:async v=>{ui.confirm=null;const {error}=await sb.from("servicios").delete().eq("id",v);if(error){toast("No se pudo borrar: tiene turnos asociados. Ocultalo en su lugar.");return;}S.servicios=S.servicios.filter(s=>s.id!==v);toast("Tratamiento borrado");},
   proOpen:v=>{ui.proOpen=v||null;},
+  logoDel:async()=>{ui.confirm=null;const viejo=S.config.logoUrl;await upd("config",null,{logo_url:""});S.config.logoUrl="";borrarLogoArchivo(viejo);toast("Logo quitado");},
   proAdd:async()=>{const h={};for(let i=0;i<7;i++)h[i]=i>=1&&i<=5?[{desde:"09:00",hasta:"18:00"}]:[];
     const {data,error}=await sb.from("profesionales").insert({nombre:"Nuevo profesional",color:(S.profesionales.length%4)+1,activo:false,horario:h,orden:S.profesionales.length+1}).select().single();
     if(error){toast(errMsg(error));return;}S.profesionales.push(mapPro(data));ui.proOpen=data.id;},
@@ -1026,6 +1047,27 @@ const A={
     p.archivado=true;p.activo=false;ui.proOpen=null;toast(p.nombre+" ya no aparece en el panel ni para reservar");
   }
 };
+function borrarLogoArchivo(url){
+  const m=String(url||"").match(/\/marca\/([^?]+)/);
+  if(m)sb.storage.from("marca").remove([decodeURIComponent(m[1])]).catch(()=>{});
+}
+async function subirLogo(file){
+  if(!/^image\/(png|jpeg|webp)$/.test(file.type)){toast("Subí una imagen PNG, JPG o WEBP.");return;}
+  if(file.size>8*1024*1024){toast("La imagen es muy pesada. Probá con una de menos de 8 MB.");return;}
+  ui.busy=true;render();
+  try{
+    const blob=await new Promise((ok,mal)=>{const fr=new FileReader();fr.onerror=mal;fr.onload=()=>{const img=new Image();img.onerror=mal;img.onload=()=>{
+      const k=Math.min(1,512/Math.max(img.width,img.height));const cv=document.createElement("canvas");cv.width=Math.max(1,Math.round(img.width*k));cv.height=Math.max(1,Math.round(img.height*k));
+      cv.getContext("2d").drawImage(img,0,0,cv.width,cv.height);cv.toBlob(b=>b?ok(b):mal(new Error("No se pudo procesar la imagen")),file.type==="image/jpeg"?"image/jpeg":"image/png",0.9);};img.src=fr.result;};fr.readAsDataURL(file);});
+    const ext=blob.type==="image/jpeg"?"jpg":"png",path=`logo-${Date.now()}.${ext}`;
+    const up=await sb.storage.from("marca").upload(path,blob,{contentType:blob.type,upsert:false,cacheControl:"31536000"});
+    if(up.error)throw up.error;
+    const url=sb.storage.from("marca").getPublicUrl(path).data.publicUrl;
+    const viejo=S.config.logoUrl;
+    await upd("config",null,{logo_url:url});S.config.logoUrl=url;
+    borrarLogoArchivo(viejo);toast("Logo actualizado");
+  }catch(e){toast(errMsg(e));}finally{ui.busy=false;}
+}
 async function bloquear(desde,hasta,profId,motivo,hDesde,hHasta){
   const filas=[];
   for(let d=parseYmd(desde);ymd(d)<=hasta;d=addDays(d,1)){filas.push({fecha:ymd(d),desde:hDesde,hasta:hHasta,profesional_id:profId,motivo});if(filas.length>366)break;}
@@ -1054,6 +1096,7 @@ document.addEventListener("change",async e=>{
   const v=el.value;
   try{
     if(c==="comp"){leerComprobante(el.files&&el.files[0],r=>{ui.comp=r;render();});return;}
+    if(c==="logo"){const f=el.files&&el.files[0];el.value="";if(f)await subirLogo(f);render();return;}
     if(c==="monto")ui.sel.monto=v;
     else if(c==="medio")ui.sel.medio=v;
     else if(c==="agendaFecha"){if(v){ui.agendaFecha=v;ui.hl=null;}}
@@ -1177,6 +1220,21 @@ document.addEventListener("submit",async e=>{
       else if((de&&!ha)||(!de&&ha)||(de&&ha&&toMin(ha)<=toMin(de)))toast("Revisá el horario: completá desde y hasta, o dejá los dos vacíos");
       else if((de||ha)&&fh!==fe)toast("Un bloqueo por horas es para un solo día. Para varios días dejá las horas vacías.");
       else await bloquear(fe,fh,val("bqPro")||null,val("bqMotivo").trim(),de||null,ha||null);
+    }
+    else if(k==="reinicio"){
+      const conf=val("reinicioConf").trim(),todo=(f.querySelector('input[name="alcance"]:checked')||{}).value==="todo";
+      if(conf!=="BORRAR"){toast("Escribí BORRAR (en mayúsculas) para confirmar");}
+      else{
+        ui.busy=true;render();
+        try{
+          const paths=S.turnos.map(t=>t.comprobante&&t.comprobante.path).filter(Boolean);
+          for(let i=0;i<paths.length;i+=100){await sb.storage.from("comprobantes").remove(paths.slice(i,i+100));}
+          const r=await rpc("admin_reiniciar",{p_confirmacion:conf,p_catalogo:todo});
+          ui.cliSel=null;ui.nt=null;ui.recienConf=null;ui.compUrls={};
+          await loadStaff();
+          toast(`Listo: se borraron ${r.turnos} turnos y ${r.clientes} clientes${todo?", más profesionales y tratamientos":""}.`);
+        }finally{ui.busy=false;}
+      }
     }
     else if(k==="vac"){
       const pid=f.getAttribute("data-v"),fe=val("vacDesde_"+pid),fh=val("vacHasta_"+pid)||fe;
