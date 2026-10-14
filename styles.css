@@ -273,3 +273,11 @@ tr.click{cursor:pointer} tr.click:hover td{background:var(--sunk)}
 .logo-prev img{max-width:88px;max-height:64px;object-fit:contain}
 .peligro{border-color:var(--bad-soft)}
 .peligro h3{color:var(--bad)}
+
+/* bienvenida */
+.hero{display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap;background:var(--accent-soft);border-radius:var(--r);padding:20px 22px;margin-bottom:18px}
+.hero h1{font-size:clamp(1.35rem,4vw,1.8rem)}
+.hero p{color:var(--ink);max-width:60ch}
+.hero-pro{display:flex;gap:10px;align-items:center;background:var(--surface);border-radius:999px;padding:6px 16px 6px 6px}
+.hero-pro b{display:block;font-size:.95rem}
+.hero-pro span{display:block}

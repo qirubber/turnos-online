@@ -93,8 +93,8 @@ function quitarToken(tk){try{localStorage.setItem(TOKENS_KEY,JSON.stringify(leer
 const linkMis=tk=>location.origin+location.pathname+"#mis-"+tk;
 
 /* ---------- datos: mapeo de filas ---------- */
-const CFG_COLS={negocio:"negocio",whatsapp:"whatsapp",alias:"alias",cbu:"cbu",titular:"titular",banco:"banco",mpLink:"mp_link",exigirSena:"exigir_sena",cancelMin:"cancel_min",senaHoras:"sena_horas",politica:"politica",ventana:"ventana",anticipacion:"anticipacion",holdHoras:"hold_horas",intervalo:"intervalo",recordatorioHoras:"recordatorio_horas",mensaje:"mensaje",mensajeConfirmacion:"mensaje_confirmacion",logoUrl:"logo_url"};
-function mapConfig(r){const c={mpActivo:false};Object.keys(CFG_COLS).forEach(k=>{c[k]=r[CFG_COLS[k]];});c.logoUrl=c.logoUrl||"";return c;}
+const CFG_COLS={negocio:"negocio",whatsapp:"whatsapp",alias:"alias",cbu:"cbu",titular:"titular",banco:"banco",mpLink:"mp_link",exigirSena:"exigir_sena",cancelMin:"cancel_min",senaHoras:"sena_horas",politica:"politica",ventana:"ventana",anticipacion:"anticipacion",holdHoras:"hold_horas",intervalo:"intervalo",recordatorioHoras:"recordatorio_horas",mensaje:"mensaje",mensajeConfirmacion:"mensaje_confirmacion",logoUrl:"logo_url",bienvenidaTitulo:"bienvenida_titulo",bienvenidaTexto:"bienvenida_texto"};
+function mapConfig(r){const c={mpActivo:false};Object.keys(CFG_COLS).forEach(k=>{c[k]=r[CFG_COLS[k]];});c.logoUrl=c.logoUrl||"";c.bienvenidaTitulo=c.bienvenidaTitulo||"";c.bienvenidaTexto=c.bienvenidaTexto||"";return c;}
 function normH(h){const o={};for(let i=0;i<7;i++)o[i]=Array.isArray(h&&h[i])?h[i]:[];return o;}
 const mapPro=r=>({id:r.id,nombre:r.nombre,rol:r.rol||"",tel:r.tel||"",color:r.color||1,activo:r.activo,archivado:!!r.archivado,horario:normH(r.horario),orden:r.orden||0});
 const SVC_COLS={nombre:"nombre",categoria:"categoria",desc:"descripcion",duracion:"duracion",preparacion:"preparacion",precio:"precio",sena:"sena",activo:"activo",equipo:"equipo",restringir:"restringir",desde:"desde",hasta:"hasta",profIds:"prof_ids",dias:"dias"};
@@ -280,13 +280,24 @@ function vReservar(){
   if(ui.reprog)return '<div class="fade"><div class="grid2"><div class="stack">'+vFechaHora()+"</div>"+resumen()+"</div></div>";
   if(ui.done)return vDone();
   if(pasos().indexOf(ui.step)<0)ui.step=pasos()[0];
-  if(ui.step==="pro")return '<div class="fade">'+stepsBar()+vElegirPro()+"</div>";
-  if(ui.step==="svc")return '<div class="fade">'+stepsBar()+vElegirSvc()+"</div>";
+  const inicio=ui.step===pasos()[0]&&!ui.sel.servicioId&&prosCliente().length?vBienvenida():"";
+  if(ui.step==="pro")return '<div class="fade">'+inicio+stepsBar()+vElegirPro()+"</div>";
+  if(ui.step==="svc")return '<div class="fade">'+inicio+stepsBar()+vElegirSvc()+"</div>";
   let body="";
   if(ui.step==="fecha")body=vFechaHora();
   if(ui.step==="datos")body=vDatos();
   if(ui.step==="pago")body=vPago();
   return '<div class="fade">'+stepsBar()+'<div class="grid2"><div class="stack">'+body+"</div>"+resumen()+"</div></div>";
+}
+function textoBienvenida(){
+  const ps=prosCliente(),uno=ps.length===1?ps[0]:null,c=S.config;
+  const sub=t=>t.replace(/\{profesional\}/g,uno?uno.nombre:"nuestro equipo").replace(/\{negocio\}/g,c.negocio);
+  return {uno,titulo:sub(c.bienvenidaTitulo||`¡Te damos la bienvenida a ${c.negocio}!`),
+    texto:sub(c.bienvenidaTexto||(uno?`Reservá tu turno con ${uno.nombre}: elegí el tratamiento, el día y el horario que mejor te quede.`:"Elegí con quién querés atenderte, el tratamiento y el horario que mejor te quede."))};
+}
+function vBienvenida(){
+  const b=textoBienvenida();
+  return `<section class="hero"><div class="stack" style="gap:6px;min-width:0"><h1>${esc(b.titulo)}</h1><p>${esc(b.texto)}</p></div>${b.uno?`<div class="hero-pro pc${b.uno.color}"><div class="av">${esc(b.uno.nombre.charAt(0))}</div><div style="min-width:0"><b>${esc(b.uno.nombre)}</b><span class="small muted">${esc(b.uno.rol)}</span></div></div>`:""}</section>`;
 }
 function sinTurnos(){return `<div class="panel stack"><h3>Por ahora no hay turnos disponibles</h3><p class="muted">Escribinos por WhatsApp${S.config.whatsapp?` al <span class="mono">+${esc(S.config.whatsapp)}</span>`:""} y te avisamos cuando se abran nuevos horarios.</p></div>`;}
 function vElegirPro(){
@@ -305,7 +316,7 @@ function vElegirSvc(){
   const act=S.servicios.filter(s=>s.activo&&svcDisponible(s,pid));
   const cats=[...new Set(act.map(s=>s.categoria))];
   const back=multiPro()?`<button class="btn sm ghost" data-a="step" data-v="pro">← Cambiar profesional</button>`:"";
-  return `<div class="stack"><div class="row between"><div><h2>¿Qué tratamiento querés?</h2><p class="muted">${pid&&pid!=="any"?"Tratamientos que hace "+esc(proNombre(pid))+".":"Elegí uno para ver los días y horarios libres."}</p></div>${back}</div>
+  return `<div class="stack"><div class="row between"><div><h2>¿Qué tratamiento querés?</h2><p class="muted">${pid&&pid!=="any"&&multiPro()?"Tratamientos que hace "+esc(proNombre(pid))+".":"Elegí uno para ver los días y horarios libres."}</p></div>${back}</div>
     ${act.length?cats.map(c=>`<div class="cat">${esc(c||"Otros")}</div><div class="cards">${act.filter(s=>s.categoria===c).map(s=>`<button class="card" data-a="pickSvc" data-v="${s.id}" aria-pressed="${ui.sel.servicioId===s.id}"><h3>${esc(s.nombre)}</h3><p class="small muted">${esc(s.desc)}</p>${s.restringir?`<p class="small muted">Solo ${diasTxt(s)}</p>`:""}<div class="meta"><span class="small muted">${s.duracion} min</span><span class="price">${$m(s.precio)}</span></div></button>`).join("")}</div>`).join(""):sinTurnos()}</div>`;
 }
 function vFechaHora(){
@@ -844,6 +855,9 @@ function vAjustes(){
       <div class="logo-edit"><div class="logo-prev">${c.logoUrl?`<img src="${esc(c.logoUrl)}" alt="Logo actual">`:`<span class="mark">${esc((c.negocio.trim()[0]||"T").toUpperCase())}</span>`}</div>
         <div class="stack" style="gap:6px;min-width:0"><b>Logo</b><span class="small muted">PNG, JPG o WEBP de hasta 2 MB. Mejor con fondo transparente. Se muestra junto al nombre en la página de reservas y en el panel.</span>
           <div class="row"><label class="btn sm" for="logoFile">${c.logoUrl?"Cambiar logo":"Subir logo"}</label><input type="file" id="logoFile" accept="image/png,image/jpeg,image/webp" data-c="logo" hidden>${c.logoUrl?(ui.confirm==="logoDel"?`<span class="small">¿Quitar el logo?</span><button class="btn sm danger" data-a="logoDel">Sí, quitar</button><button class="btn sm" data-a="noConfirm">No</button>`:`<button class="btn sm ghost" data-a="ask" data-v="logoDel">Quitar logo</button>`):""}${ui.busy?'<span class="small muted">Subiendo…</span>':""}</div></div></div></section>
+    <section class="panel stack"><div><h3>Bienvenida de la página de reservas</h3><p class="small muted">Es lo primero que ve el cliente. Si lo dejás vacío se usa el texto de ejemplo. Podés usar {profesional} y {negocio}.</p></div>
+      <div class="fgrid">${txt("bienvenidaTitulo","Título","text","",`¡Te damos la bienvenida a ${c.negocio}!`)}</div>
+      <label class="f">Texto<textarea id="cfg_bienvenidaTexto" data-c="cfg" data-k="bienvenidaTexto" placeholder="${esc(textoBienvenida().texto)}" style="min-height:64px">${esc(c.bienvenidaTexto)}</textarea></label></section>
     <section class="panel stack"><h3>Cobro de señas</h3>
       <div class="fgrid">${txt("alias","Alias")}${txt("cbu","CBU / CVU")}${txt("titular","Titular de la cuenta")}${txt("banco","Banco o billetera")}</div>
       <label class="switch"><input type="checkbox" id="cfg_exigir" data-c="cfg" data-k="exigirSena" data-b="1" ${c.exigirSena?"checked":""}>Exigir seña para confirmar el turno</label>
