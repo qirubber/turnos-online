@@ -49,7 +49,8 @@ const cliById=id=>S.clientes.find(c=>c.id===id);
 const turnoById=id=>S.turnos.find(t=>t.id===id);
 const misTurno=id=>S.misTurnos.find(t=>t.id===id);
 const proById=id=>S.profesionales.find(p=>p.id===id);
-const prosActivos=()=>S.profesionales.filter(p=>p.activo);
+const prosPanel=()=>S.profesionales.filter(p=>!p.archivado);
+const prosActivos=()=>S.profesionales.filter(p=>p.activo&&!p.archivado);
 const ocupa=t=>!!OCUPA[t.estado];
 const finConPrep=t=>toMin(t.hora)+t.duracion+(t.preparacion||0);
 const minutosHasta=t=>(startOf(t)-ahoraAR())/60000;
@@ -95,7 +96,7 @@ const linkMis=tk=>location.origin+location.pathname+"#mis-"+tk;
 const CFG_COLS={negocio:"negocio",whatsapp:"whatsapp",alias:"alias",cbu:"cbu",titular:"titular",banco:"banco",mpLink:"mp_link",exigirSena:"exigir_sena",cancelMin:"cancel_min",senaHoras:"sena_horas",politica:"politica",ventana:"ventana",anticipacion:"anticipacion",holdHoras:"hold_horas",intervalo:"intervalo",recordatorioHoras:"recordatorio_horas",mensaje:"mensaje",mensajeConfirmacion:"mensaje_confirmacion"};
 function mapConfig(r){const c={mpActivo:false};Object.keys(CFG_COLS).forEach(k=>{c[k]=r[CFG_COLS[k]];});return c;}
 function normH(h){const o={};for(let i=0;i<7;i++)o[i]=Array.isArray(h&&h[i])?h[i]:[];return o;}
-const mapPro=r=>({id:r.id,nombre:r.nombre,rol:r.rol||"",tel:r.tel||"",color:r.color||1,activo:r.activo,horario:normH(r.horario),orden:r.orden||0});
+const mapPro=r=>({id:r.id,nombre:r.nombre,rol:r.rol||"",tel:r.tel||"",color:r.color||1,activo:r.activo,archivado:!!r.archivado,horario:normH(r.horario),orden:r.orden||0});
 const SVC_COLS={nombre:"nombre",categoria:"categoria",desc:"descripcion",duracion:"duracion",preparacion:"preparacion",precio:"precio",sena:"sena",activo:"activo",equipo:"equipo",restringir:"restringir",desde:"desde",hasta:"hasta",profIds:"prof_ids",dias:"dias"};
 const mapSvc=r=>({id:r.id,categoria:r.categoria||"",nombre:r.nombre,desc:r.descripcion||"",duracion:r.duracion,preparacion:r.preparacion||0,precio:r.precio,sena:r.sena,activo:r.activo,profIds:r.prof_ids||[],equipo:r.equipo||"",restringir:r.restringir,dias:r.dias||[],desde:hhmm(r.desde),hasta:hhmm(r.hasta),orden:r.orden||0});
 const mapBloq=r=>({id:r.id,fecha:r.fecha,desde:hhmm(r.desde),hasta:hhmm(r.hasta),profId:r.profesional_id||null,motivo:r.motivo||""});
@@ -237,7 +238,21 @@ function freshUI(){
     cliSel:null,cliQ:"",svcOpen:null,proOpen:null,notifOpen:false,ingPer:"prox4",recienConf:null,
     reprog:null,esperaForm:false,mover:null,csv:null,packForm:false,credForm:false,compUrls:{},cargado:false,errorCarga:""};
 }
-const multiPro=()=>prosActivos().length>1;
+/* disponibilidad real para el cliente: sin horarios en todo el período = no se muestra */
+let dispCache=null;
+function hayDisp(proId,svc){
+  dispCache=dispCache||{};
+  const key=proId+"|"+(svc?svc.id:"*");
+  if(key in dispCache)return dispCache[key];
+  const p=proById(proId);let ok=false;
+  const svcs=svc?[svc]:S.servicios.filter(x=>x.activo&&x.profIds.includes(proId));
+  const hoy=hoy0();
+  if(p)for(let i=0;i<=S.config.ventana&&!ok;i++){const f=ymd(addDays(hoy,i));for(const x of svcs){if(slotsPro(f,x,p).length){ok=true;break;}}}
+  return dispCache[key]=ok;
+}
+const prosCliente=()=>prosActivos().filter(p=>hayDisp(p.id));
+const svcDisponible=(x,pid)=>pid&&pid!=="any"?hayDisp(pid,x):x.profIds.some(id=>{const p=proById(id);return p&&p.activo&&!p.archivado&&hayDisp(id,x);});
+const multiPro=()=>prosCliente().length>1;
 const pasos=()=>multiPro()?["pro","svc","fecha","datos","pago"]:["svc","fecha","datos","pago"];
 const NOMBRES_PASO={pro:"Profesional",svc:"Tratamiento",fecha:"Día y hora",datos:"Tus datos",pago:"Seña"};
 
@@ -273,10 +288,11 @@ function vReservar(){
   if(ui.step==="pago")body=vPago();
   return '<div class="fade">'+stepsBar()+'<div class="grid2"><div class="stack">'+body+"</div>"+resumen()+"</div></div>";
 }
+function sinTurnos(){return `<div class="panel stack"><h3>Por ahora no hay turnos disponibles</h3><p class="muted">Escribinos por WhatsApp${S.config.whatsapp?` al <span class="mono">+${esc(S.config.whatsapp)}</span>`:""} y te avisamos cuando se abran nuevos horarios.</p></div>`;}
 function vElegirPro(){
-  const ps=prosActivos();
+  const ps=prosCliente();
+  if(!ps.length)return sinTurnos();
   const cats=p=>[...new Set(S.servicios.filter(s=>s.activo&&s.profIds.includes(p.id)).map(s=>s.categoria))].join(" · ");
-  if(!ps.length)return '<div class="panel empty">El centro todavía no cargó profesionales.</div>';
   return `<div class="stack"><div><h2>¿Con quién querés atenderte?</h2><p class="muted">Si te da lo mismo, te mostramos todos los horarios libres.</p></div>
     <div class="cards">
       <button class="card" data-a="pickPro" data-v="any" aria-pressed="${ui.sel.profId==="any"}"><div class="row"><div class="av">★</div><div><h3>Cualquiera disponible</h3><p class="small muted">Más horarios para elegir</p></div></div></button>
@@ -286,11 +302,11 @@ function vElegirPro(){
 const diasTxt=s=>s.dias.slice().sort((a,b)=>((a+6)%7)-((b+6)%7)).map(d=>DIAS[d].toLowerCase()).join(", ");
 function vElegirSvc(){
   const pid=ui.sel.profId;
-  const act=S.servicios.filter(s=>s.activo&&(pid&&pid!=="any"?s.profIds.includes(pid):s.profIds.some(id=>{const p=proById(id);return p&&p.activo;})));
+  const act=S.servicios.filter(s=>s.activo&&svcDisponible(s,pid));
   const cats=[...new Set(act.map(s=>s.categoria))];
   const back=multiPro()?`<button class="btn sm ghost" data-a="step" data-v="pro">← Cambiar profesional</button>`:"";
   return `<div class="stack"><div class="row between"><div><h2>¿Qué tratamiento querés?</h2><p class="muted">${pid&&pid!=="any"?"Tratamientos que hace "+esc(proNombre(pid))+".":"Elegí uno para ver los días y horarios libres."}</p></div>${back}</div>
-    ${act.length?cats.map(c=>`<div class="cat">${esc(c||"Otros")}</div><div class="cards">${act.filter(s=>s.categoria===c).map(s=>`<button class="card" data-a="pickSvc" data-v="${s.id}" aria-pressed="${ui.sel.servicioId===s.id}"><h3>${esc(s.nombre)}</h3><p class="small muted">${esc(s.desc)}</p>${s.restringir?`<p class="small muted">Solo ${diasTxt(s)}</p>`:""}<div class="meta"><span class="small muted">${s.duracion} min</span><span class="price">${$m(s.precio)}</span></div></button>`).join("")}</div>`).join(""):'<div class="panel empty">No hay tratamientos disponibles por el momento.</div>'}</div>`;
+    ${act.length?cats.map(c=>`<div class="cat">${esc(c||"Otros")}</div><div class="cards">${act.filter(s=>s.categoria===c).map(s=>`<button class="card" data-a="pickSvc" data-v="${s.id}" aria-pressed="${ui.sel.servicioId===s.id}"><h3>${esc(s.nombre)}</h3><p class="small muted">${esc(s.desc)}</p>${s.restringir?`<p class="small muted">Solo ${diasTxt(s)}</p>`:""}<div class="meta"><span class="small muted">${s.duracion} min</span><span class="price">${$m(s.precio)}</span></div></button>`).join("")}</div>`).join(""):sinTurnos()}</div>`;
 }
 function vFechaHora(){
   const s=svcById(ui.sel.servicioId),m=ui.mes,y=m.getFullYear(),mo=m.getMonth();
@@ -483,7 +499,7 @@ function vAgenda(){
   const fact=act.reduce((a,t)=>a+facturacion(t),0);
   const cobr=enRango.filter(cuentaIngreso).reduce((a,t)=>a+neto(t),0);
   const pend=enRango.filter(t=>t.estado==="pendiente_pago"||t.estado==="por_validar").length;
-  const pros=esAdmin()?S.profesionales:S.profesionales.filter(p=>p.id===ui.yo.profId);
+  const pros=esAdmin()?prosPanel():prosPanel().filter(p=>p.id===ui.yo.profId);
   let html=`<div class="row between" style="margin-bottom:12px"><div><div class="eyebrow">${sem?"Agenda semanal":(f===hoyS()?"Hoy":"Agenda del día")}</div><h2>${esc(titulo)}</h2></div><button class="btn pri" data-a="ntOpen">+ Nuevo turno</button></div>
     <div class="row between" style="margin-bottom:14px"><div class="row"><div class="seg" role="group" aria-label="Vista"><button data-a="vista" data-v="dia" aria-pressed="${!sem}">Día</button><button data-a="vista" data-v="semana" aria-pressed="${sem}">Semana</button></div>
       ${pros.length>1?`<select id="agProf" data-c="agProf" style="width:auto" aria-label="Profesional"><option value="todos">Todos los profesionales</option>${pros.map(p=>`<option value="${p.id}" ${ui.agProf===p.id?"selected":""}>${esc(p.nombre)}</option>`).join("")}</select>`:""}</div>
@@ -494,7 +510,7 @@ function vAgenda(){
 }
 function vSemana(ini){
   const dias=[];for(let i=0;i<7;i++)dias.push(addDays(ini,i));
-  const pros=S.profesionales.filter(p=>(ui.agProf==="todos"||p.id===ui.agProf)&&(esAdmin()||p.id===ui.yo.profId));
+  const pros=prosPanel().filter(p=>(ui.agProf==="todos"||p.id===ui.agProf)&&(esAdmin()||p.id===ui.yo.profId));
   const ts=S.turnos.filter(t=>ocupa(t)&&filtroPro(t));
   const domingo=ymd(dias[6]);
   const usaDom=pros.some(p=>(p.horario[0]||[]).length)||ts.some(t=>t.fecha===domingo);
@@ -571,7 +587,7 @@ function apptRow(t){
 }
 function vNuevoTurno(){
   const n=ui.nt,s=svcById(n.svcId);
-  let pros=s?S.profesionales.filter(p=>p.activo&&s.profIds.includes(p.id)):[];
+  let pros=s?prosActivos().filter(p=>s.profIds.includes(p.id)):[];
   if(!esAdmin())pros=pros.filter(p=>p.id===ui.yo.profId);
   if(s&&!pros.find(p=>p.id===n.profId))n.profId=pros[0]?pros[0].id:"";
   const slots=s&&n.profId&&n.fecha?slotsPro(n.fecha,s,proById(n.profId),{panel:true}):[];
@@ -665,7 +681,7 @@ function calcPeriodo(a,b,profId){
   let disp=0;
   for(let d=new Date(a);d<=b;d=addDays(d,1)){
     const s=ymd(d);
-    S.profesionales.filter(p=>p.activo&&(!profId||p.id===profId)).forEach(p=>{
+    S.profesionales.filter(p=>p.activo&&!p.archivado&&(!profId||p.id===profId)).forEach(p=>{
       if(bloqueosDe(s,p.id).some(x=>!x.desde))return;
       (p.horario[d.getDay()]||[]).forEach(r=>{disp+=toMin(r.hasta)-toMin(r.desde);});
     });
@@ -698,7 +714,7 @@ function vIngresos(){
   r.vs.forEach(v=>{const k="Paquetes vendidos";porS[k]=porS[k]||{n:0,f:0,c:0};porS[k].n++;porS[k].f+=v.monto;porS[k].c+=v.monto;});
   const filas=Object.keys(porS).sort((x,y)=>porS[y].f-porS[x].f);
   html+=`<section class="list"><div style="padding:14px 14px 0"><h3>Por tratamiento</h3></div>${filas.length?`<div class="tbl-wrap"><table><thead><tr><th>Tratamiento</th><th class="num">Cantidad</th><th class="num">Facturación</th><th class="num">Cobrado</th><th>Peso</th></tr></thead><tbody>${filas.map(k=>`<tr><td>${esc(k)}</td><td class="num">${porS[k].n}</td><td class="num">${$m(porS[k].f)}</td><td class="num">${$m(porS[k].c)}</td><td><div class="bar"><i style="width:${r.fact?Math.round(porS[k].f/r.fact*100):0}%"></i></div></td></tr>`).join("")}</tbody></table></div>`:'<p class="empty">Sin turnos en el período.</p>'}</section>`;
-  html+=`<section class="list"><div style="padding:14px 14px 0"><h3>Por profesional</h3></div><div class="tbl-wrap"><table><thead><tr><th>Profesional</th><th class="num">Turnos</th><th class="num">Facturación</th><th class="num">Cobrado</th><th class="num">Ocupación</th></tr></thead><tbody>${S.profesionales.map(p=>{const x=calcPeriodo(a,b,p.id);return `<tr><td>${proTag(p.id)}</td><td class="num">${x.ts.length}</td><td class="num">${$m(x.fact)}</td><td class="num">${$m(x.cobr)}</td><td class="num">${x.ocupPct}%</td></tr>`;}).join("")}</tbody></table></div></section></div>`;
+  html+=`<section class="list"><div style="padding:14px 14px 0"><h3>Por profesional</h3></div><div class="tbl-wrap"><table><thead><tr><th>Profesional</th><th class="num">Turnos</th><th class="num">Facturación</th><th class="num">Cobrado</th><th class="num">Ocupación</th></tr></thead><tbody>${S.profesionales.map(p=>({p,x:calcPeriodo(a,b,p.id)})).filter(({p,x})=>!p.archivado||x.ts.length).map(({p,x})=>{return `<tr><td>${proTag(p.id)}</td><td class="num">${x.ts.length}</td><td class="num">${$m(x.fact)}</td><td class="num">${$m(x.cobr)}</td><td class="num">${x.ocupPct}%</td></tr>`;}).join("")}</tbody></table></div></section></div>`;
   return html;
 }
 function statsCliente(c){
@@ -755,7 +771,7 @@ function vServicios(){
         <div class="fgrid">${f("nombre","Nombre")}${f("categoria","Categoría")}${f("duracion","Duración (min)","number",'min="10" step="5"')}${f("preparacion","Preparación después (min)","number",'min="0" step="5"')}${f("precio","Precio ($)","number",'min="0" step="500"')}${f("sena","Seña (%)","number",'min="0" max="100" step="5"')}</div>
         ${f("desc","Descripción para el cliente")}
         <label class="f"><span>Equipo o cabina compartida <small>Dos turnos que usan el mismo equipo no se superponen, aunque sean de distintos profesionales.</small></span><input type="text" id="s_eq_${s.id}" list="equipos" data-c="svc" data-id="${s.id}" data-k="equipo" value="${esc(s.equipo)}" placeholder="Ej. Láser diodo"></label>
-        <div class="stack" style="gap:6px"><b class="small">Profesionales que lo hacen</b><div class="chips">${S.profesionales.map(p=>`<label class="tchip pc${p.color}"><input type="checkbox" id="sp_${s.id}_${p.id}" data-c="svcPro" data-id="${s.id}" data-p="${p.id}" ${s.profIds.includes(p.id)?"checked":""}><span class="dot"></span>${esc(p.nombre)}</label>`).join("")}</div></div>
+        <div class="stack" style="gap:6px"><b class="small">Profesionales que lo hacen</b><div class="chips">${prosPanel().map(p=>`<label class="tchip pc${p.color}"><input type="checkbox" id="sp_${s.id}_${p.id}" data-c="svcPro" data-id="${s.id}" data-p="${p.id}" ${s.profIds.includes(p.id)?"checked":""}><span class="dot"></span>${esc(p.nombre)}</label>`).join("")}</div></div>
         <div class="stack" style="gap:8px"><label class="switch"><input type="checkbox" id="sr_${s.id}" data-c="svc" data-id="${s.id}" data-k="restringir" ${s.restringir?"checked":""}>Ofrecerlo solo algunos días y horarios</label>
           ${s.restringir?`<div class="chips">${[1,2,3,4,5,6,0].map(d=>`<label class="tchip"><input type="checkbox" id="sd_${s.id}_${d}" data-c="svcDia" data-id="${s.id}" data-d="${d}" ${s.dias.includes(d)?"checked":""}>${DCORTO[d]}</label>`).join("")}</div>
           <div class="rng"><span class="small muted">De</span><input type="time" id="sdesde_${s.id}" data-c="svc" data-id="${s.id}" data-k="desde" value="${s.desde}" aria-label="Desde"><span class="small muted">a</span><input type="time" id="shasta_${s.id}" data-c="svc" data-id="${s.id}" data-k="hasta" value="${s.hasta}" aria-label="Hasta"></div><p class="small muted">Se cruza con el horario de cada profesional: solo aparecen los turnos que entran en los dos.</p>`:""}</div>
@@ -763,6 +779,17 @@ function vServicios(){
           ${ui.confirm==="sdel:"+s.id?`<span class="row"><span class="small">¿Borrar este tratamiento? Si tiene turnos, mejor ocultalo.</span><button class="btn sm danger" data-a="svcDel" data-v="${s.id}">Borrar</button><button class="btn sm" data-a="noConfirm">No</button></span>`:`<button class="btn sm ghost" data-a="ask" data-v="sdel:${s.id}">Borrar tratamiento</button>`}</div>
       </div></div>`;
     }).join("")}</div>`;
+}
+/* agrupa bloqueos de días completos consecutivos (mismo profesional y motivo) */
+function gruposBloqueo(list){
+  const ord=list.slice().sort((a,b)=>((a.profId||"")+a.motivo+a.fecha+(a.desde||"")).localeCompare((b.profId||"")+b.motivo+b.fecha+(b.desde||"")));
+  const out=[];
+  ord.forEach(b=>{
+    const g=out[out.length-1];
+    if(g&&!b.desde&&!g.hDesde&&g.profId===b.profId&&g.motivo===b.motivo&&ymd(addDays(parseYmd(g.hasta),1))===b.fecha){g.hasta=b.fecha;g.ids.push(b.id);}
+    else out.push({desde:b.fecha,hasta:b.fecha,hDesde:b.desde,hHasta:b.hasta,profId:b.profId,motivo:b.motivo,ids:[b.id]});
+  });
+  return out.sort((a,b)=>a.desde.localeCompare(b.desde));
 }
 function vDisponibilidad(){
   const c=S.config,orden=[1,2,3,4,5,6,0];
@@ -774,30 +801,39 @@ function vDisponibilidad(){
       <label class="f">Aviso mínimo para reservar${sel("cfgAnt","anticipacion",[[30,"30 minutos"],[60,"1 hora"],[120,"2 horas"],[720,"12 horas"],[1440,"24 horas"]],c.anticipacion)}</label>
       <label class="f">Reserva sin seña dura${sel("cfgHold","holdHoras",[[1,"1 hora"],[2,"2 horas"],[4,"4 horas"],[12,"12 horas"],[24,"24 horas"]],c.holdHoras)}</label></div></section>
     <div class="row between"><h3>Profesionales</h3><button class="btn sm" data-a="proAdd">+ Agregar profesional</button></div>`;
-  html+=S.profesionales.map(p=>{
+  html+=prosPanel().map(p=>{
     const open=ui.proOpen===p.id;
     const dias=orden.filter(d=>(p.horario[d]||[]).length).map(d=>DCORTO[d]).join(" ");
-    let h=`<div class="ed"><div class="ed-h"><div class="av pc${p.color}">${esc(p.nombre.charAt(0))}</div><div class="grow"><b>${esc(p.nombre)}</b><div class="small muted">${esc(p.rol||"Sin especialidad")} · ${dias||"sin días"}</div></div><span class="pill ${p.activo?"confirmado":"ausente"}">${p.activo?"Recibe reservas":"Pausado"}</span><button class="btn sm" data-a="proOpen" data-v="${open?"":p.id}">${open?"Cerrar":"Editar"}</button></div>`;
+    const vac=gruposBloqueo(S.bloqueos.filter(b=>b.profId===p.id&&b.fecha>=hoyS()&&!b.desde));
+    const ausenteHoy=vac.find(g=>g.desde<=hoyS()&&g.hasta>=hoyS());
+    let h=`<div class="ed"><div class="ed-h"><div class="av pc${p.color}">${esc(p.nombre.charAt(0))}</div><div class="grow"><b>${esc(p.nombre)}</b><div class="small muted">${esc(p.rol||"Sin especialidad")} · ${dias||"sin días"}${vac.length?` · ${ausenteHoy?"ausente hasta el "+fechaDM(ausenteHoy.hasta):"ausencia desde el "+fechaDM(vac[0].desde)}`:""}</div></div><span class="pill ${p.activo?"confirmado":"ausente"}">${p.activo?"Recibe reservas":"Pausado"}</span><button class="btn sm" data-a="proOpen" data-v="${open?"":p.id}">${open?"Cerrar":"Editar"}</button></div>`;
     if(!open)return h+"</div>";
+    const futuros=S.turnos.filter(t=>t.profId===p.id&&ACTIVOS.includes(t.estado)&&t.fecha>=hoyS()).length;
     h+=`<div class="ed-b"><div class="fgrid">
       <label class="f">Nombre<input type="text" id="pn_${p.id}" data-c="pro" data-id="${p.id}" data-k="nombre" value="${esc(p.nombre)}"></label>
       <label class="f">Especialidad<input type="text" id="pr_${p.id}" data-c="pro" data-id="${p.id}" data-k="rol" value="${esc(p.rol)}"></label>
       <label class="f"><span>WhatsApp <small>Para mandarle su agenda</small></span><input type="tel" id="pt_${p.id}" data-c="pro" data-id="${p.id}" data-k="tel" value="${esc(p.tel)}"></label>
       <label class="f">Color en la agenda<select id="pc_${p.id}" data-c="pro" data-id="${p.id}" data-k="color">${COLORES.map(x=>`<option value="${x[0]}" ${p.color===x[0]?"selected":""}>${x[1]}</option>`).join("")}</select></label></div>
       <label class="switch"><input type="checkbox" id="pa_${p.id}" data-c="pro" data-id="${p.id}" data-k="activo" ${p.activo?"checked":""}>Recibe reservas</label>
-      <div>${orden.map(d=>{const r=p.horario[d]||[];return `<div class="dayrow"><label class="switch"><input type="checkbox" id="don_${p.id}_${d}" data-c="dayon" data-p="${p.id}" data-d="${d}" ${r.length?"checked":""}>${DIAS[d]}</label><div>${r.length?r.map((x,i)=>`<div class="rng"><input type="time" id="rd_${p.id}_${d}_${i}" data-c="rng" data-p="${p.id}" data-d="${d}" data-i="${i}" data-k="desde" value="${x.desde}" aria-label="Desde"><span class="muted">a</span><input type="time" id="rh_${p.id}_${d}_${i}" data-c="rng" data-p="${p.id}" data-d="${d}" data-i="${i}" data-k="hasta" value="${x.hasta}" aria-label="Hasta"><button class="btn sm ghost" data-a="rngDel" data-p="${p.id}" data-d="${d}" data-i="${i}">Quitar</button></div>`).join("")+`<button class="btn sm" data-a="rngAdd" data-p="${p.id}" data-d="${d}">+ Franja</button>`:'<span class="muted small">No atiende</span>'}</div></div>`;}).join("")}</div></div></div>`;
+      <div>${orden.map(d=>{const r=p.horario[d]||[];return `<div class="dayrow"><label class="switch"><input type="checkbox" id="don_${p.id}_${d}" data-c="dayon" data-p="${p.id}" data-d="${d}" ${r.length?"checked":""}>${DIAS[d]}</label><div>${r.length?r.map((x,i)=>`<div class="rng"><input type="time" id="rd_${p.id}_${d}_${i}" data-c="rng" data-p="${p.id}" data-d="${d}" data-i="${i}" data-k="desde" value="${x.desde}" aria-label="Desde"><span class="muted">a</span><input type="time" id="rh_${p.id}_${d}_${i}" data-c="rng" data-p="${p.id}" data-d="${d}" data-i="${i}" data-k="hasta" value="${x.hasta}" aria-label="Hasta"><button class="btn sm ghost" data-a="rngDel" data-p="${p.id}" data-d="${d}" data-i="${i}">Quitar</button></div>`).join("")+`<button class="btn sm" data-a="rngAdd" data-p="${p.id}" data-d="${d}">+ Franja</button>`:'<span class="muted small">No atiende</span>'}</div></div>`;}).join("")}</div>
+      <div class="stack" style="gap:8px;border-top:1px solid var(--line);padding-top:14px"><b>Vacaciones o ausencias</b><p class="small muted">Durante esos días no aparece para reservar. Los turnos que ya tenga no se borran: te avisamos para que los muevas.</p>
+        <form class="inline" data-f="vac" data-v="${p.id}" style="margin-top:0"><label class="f">Desde<input type="date" id="vacDesde_${p.id}" min="${hoyS()}"></label><label class="f">Hasta<input type="date" id="vacHasta_${p.id}" min="${hoyS()}"></label><label class="f">Motivo<input type="text" id="vacMot_${p.id}" value="Vacaciones"></label><button class="btn sm pri" type="submit">Bloquear días</button></form>
+        ${vac.length?`<div class="row">${vac.map(g=>`<span class="chip">${fechaDM(g.desde)}${g.hasta!==g.desde?" al "+fechaDM(g.hasta):""}${g.motivo?" · "+esc(g.motivo):""}<button data-a="bloqDel" data-v="${g.ids.join(",")}" aria-label="Quitar ausencia">×</button></span>`).join("")}</div>`:""}</div>
+      <div class="row between" style="border-top:1px solid var(--line);padding-top:14px"><span class="small muted">Eliminar no borra su historial de turnos ni pagos.</span>
+        ${ui.confirm==="pdel:"+p.id?(futuros?`<span class="row"><span class="small" style="color:var(--bad)">Tiene ${futuros} ${futuros===1?"turno próximo":"turnos próximos"}. Movelos o cancelalos desde la Agenda antes de eliminarlo.</span><button class="btn sm" data-a="noConfirm">Entendido</button></span>`:`<span class="row"><span class="small">¿Eliminar a ${esc(p.nombre)}?</span><button class="btn sm danger" data-a="proDel" data-v="${p.id}">Sí, eliminar</button><button class="btn sm" data-a="noConfirm">No</button></span>`):`<button class="btn sm danger" data-a="ask" data-v="pdel:${p.id}">Eliminar profesional</button>`}</div></div></div>`;
     return h;
   }).join("");
-  const bl=S.bloqueos.filter(b=>b.fecha>=hoyS()).sort((a,b)=>(a.fecha+(a.desde||"")).localeCompare(b.fecha+(b.desde||"")));
-  html+=`<section class="panel stack"><div><h3>Bloqueos</h3><p class="small muted">Feriados, vacaciones, una capacitación o un rato libre. Puede ser el día completo o unas horas, para todo el centro o para un profesional.</p></div>
+  const grupos=gruposBloqueo(S.bloqueos.filter(b=>b.fecha>=hoyS()));
+  html+=`<section class="panel stack"><div><h3>Bloqueos</h3><p class="small muted">Feriados, vacaciones, una capacitación o un rato libre. Puede ser uno o varios días completos, o unas horas de un día, para todo el centro o para un profesional.</p></div>
     <form class="fgrid" data-f="bloq" style="align-items:end">
-      <label class="f">Fecha<input type="date" id="bqFecha"></label>
-      <label class="f"><span>Desde <small>vacío = todo el día</small></span><input type="time" id="bqDesde"></label>
-      <label class="f">Hasta<input type="time" id="bqHasta"></label>
-      <label class="f">Para<select id="bqPro"><option value="">Todo el centro</option>${S.profesionales.map(p=>`<option value="${p.id}">${esc(p.nombre)}</option>`).join("")}</select></label>
+      <label class="f">Desde el día<input type="date" id="bqFecha" min="${hoyS()}"></label>
+      <label class="f"><span>Hasta el día <small>vacío = un solo día</small></span><input type="date" id="bqFechaH" min="${hoyS()}"></label>
+      <label class="f"><span>Desde la hora <small>vacío = día completo</small></span><input type="time" id="bqDesde"></label>
+      <label class="f">Hasta la hora<input type="time" id="bqHasta"></label>
+      <label class="f">Para<select id="bqPro"><option value="">Todo el centro</option>${prosPanel().map(p=>`<option value="${p.id}">${esc(p.nombre)}</option>`).join("")}</select></label>
       <label class="f">Motivo<input type="text" id="bqMotivo" placeholder="Ej. Feriado"></label>
       <button class="btn" type="submit">Bloquear</button></form>
-    <div class="row">${bl.length?bl.map(b=>`<span class="chip">${fechaCorta(b.fecha)} · ${b.desde?b.desde+"–"+b.hasta:"todo el día"}${b.profId?" · "+esc(proNombre(b.profId)):""}${b.motivo?" · "+esc(b.motivo):""}<button data-a="bloqDel" data-v="${b.id}" aria-label="Quitar bloqueo">×</button></span>`).join(""):'<span class="small muted">Ninguno.</span>'}</div></section></div>`;
+    <div class="row">${grupos.length?grupos.map(g=>`<span class="chip">${fechaCorta(g.desde)}${g.hasta!==g.desde?" al "+fechaCorta(g.hasta):""} · ${g.hDesde?g.hDesde+"–"+g.hHasta:"todo el día"}${g.profId?" · "+esc(proNombre(g.profId)):" · todo el centro"}${g.motivo?" · "+esc(g.motivo):""}<button data-a="bloqDel" data-v="${g.ids.join(",")}" aria-label="Quitar bloqueo">×</button></span>`).join(""):'<span class="small muted">Ninguno.</span>'}</div></section></div>`;
   return html;
 }
 function vAjustes(){
@@ -824,6 +860,7 @@ function vAjustes(){
 /* ---------- render ---------- */
 function render(){
   if(!S.config){return;}
+  dispCache=null;
   document.getElementById("bizName").textContent=S.config.negocio;
   document.title=(ui.mode==="pro"?"Panel · ":"Turnos · ")+S.config.negocio;
   const pa=prosActivos();
@@ -980,8 +1017,25 @@ const A={
   rngAdd:async(v,el)=>{const p=proById(el.getAttribute("data-p")),d=el.getAttribute("data-d"),r=p.horario[d],last=r[r.length-1],a=last?Math.min(toMin(last.hasta)+60,22*60):9*60;
     r.push({desde:fromMin(a),hasta:fromMin(Math.min(a+180,23*60))});await guardarHorario(p);},
   rngDel:async(v,el)=>{const p=proById(el.getAttribute("data-p"));p.horario[el.getAttribute("data-d")].splice(+el.getAttribute("data-i"),1);await guardarHorario(p);},
-  bloqDel:async v=>{const {error}=await sb.from("bloqueos").delete().eq("id",v);if(error){toast(errMsg(error));return;}S.bloqueos=S.bloqueos.filter(b=>b.id!==v);}
+  bloqDel:async v=>{const ids=String(v).split(",").filter(Boolean);const {error}=await sb.from("bloqueos").delete().in("id",ids);if(error){toast(errMsg(error));return;}S.bloqueos=S.bloqueos.filter(b=>!ids.includes(b.id));toast("Bloqueo quitado");},
+  proDel:async v=>{
+    ui.confirm=null;const p=proById(v);if(!p)return;
+    if(S.turnos.some(t=>t.profId===v&&ACTIVOS.includes(t.estado)&&t.fecha>=hoyS())){toast("Tiene turnos próximos: movelos o cancelalos antes.");return;}
+    await upd("profesionales",v,{archivado:true,activo:false});
+    for(const s of S.servicios.filter(x=>x.profIds.includes(v))){const nv=s.profIds.filter(x=>x!==v);await upd("servicios",s.id,{prof_ids:nv});s.profIds=nv;}
+    p.archivado=true;p.activo=false;ui.proOpen=null;toast(p.nombre+" ya no aparece en el panel ni para reservar");
+  }
 };
+async function bloquear(desde,hasta,profId,motivo,hDesde,hHasta){
+  const filas=[];
+  for(let d=parseYmd(desde);ymd(d)<=hasta;d=addDays(d,1)){filas.push({fecha:ymd(d),desde:hDesde,hasta:hHasta,profesional_id:profId,motivo});if(filas.length>366)break;}
+  if(filas.length>366){toast("El rango es demasiado largo (máximo un año).");return;}
+  const {data,error}=await sb.from("bloqueos").insert(filas).select();
+  if(error)throw error;
+  data.forEach(r=>S.bloqueos.push(mapBloq(r)));
+  const choques=S.turnos.filter(t=>ACTIVOS.includes(t.estado)&&t.fecha>=desde&&t.fecha<=hasta&&(!profId||t.profId===profId)&&(!hDesde||(toMin(t.hora)<toMin(hHasta)&&toMin(t.hora)+t.duracion>toMin(hDesde))));
+  toast(choques.length?`Bloqueado. Ojo: hay ${choques.length} ${choques.length===1?"turno":"turnos"} en esos días; movelos o cancelalos desde la Agenda.`:`Bloqueado: ${filas.length} ${filas.length===1?"día":"días"}.`);
+}
 async function guardarHorario(p){try{await upd("profesionales",p.id,{horario:p.horario});toast("Horario guardado");}catch(e){toast(errMsg(e));}}
 
 document.addEventListener("click",e=>{
@@ -1117,13 +1171,18 @@ document.addEventListener("submit",async e=>{
       await upd("clientes",id,{credito:m});const cl=cliById(id);if(cl)cl.credito=m;ui.credForm=false;toast("Saldo a favor actualizado");
     }
     else if(k==="bloq"){
-      const fe=val("bqFecha"),de=val("bqDesde"),ha=val("bqHasta");
-      if(!fe)toast("Elegí la fecha");
+      const fe=val("bqFecha"),fh=val("bqFechaH")||fe,de=val("bqDesde"),ha=val("bqHasta");
+      if(!fe)toast("Elegí el día");
+      else if(fh<fe)toast("El día final tiene que ser igual o posterior al inicial");
       else if((de&&!ha)||(!de&&ha)||(de&&ha&&toMin(ha)<=toMin(de)))toast("Revisá el horario: completá desde y hasta, o dejá los dos vacíos");
-      else{
-        const {data,error}=await sb.from("bloqueos").insert({fecha:fe,desde:de||null,hasta:ha||null,profesional_id:val("bqPro")||null,motivo:val("bqMotivo").trim()}).select().single();
-        if(error)throw error;S.bloqueos.push(mapBloq(data));toast("Bloqueo agregado");
-      }
+      else if((de||ha)&&fh!==fe)toast("Un bloqueo por horas es para un solo día. Para varios días dejá las horas vacías.");
+      else await bloquear(fe,fh,val("bqPro")||null,val("bqMotivo").trim(),de||null,ha||null);
+    }
+    else if(k==="vac"){
+      const pid=f.getAttribute("data-v"),fe=val("vacDesde_"+pid),fh=val("vacHasta_"+pid)||fe;
+      if(!fe)toast("Elegí desde qué día");
+      else if(fh<fe)toast("El día final tiene que ser igual o posterior al inicial");
+      else await bloquear(fe,fh,pid,val("vacMot_"+pid).trim()||"Ausencia",null,null);
     }
   }catch(err){toast(errMsg(err));ui.busy=false;}
   render();

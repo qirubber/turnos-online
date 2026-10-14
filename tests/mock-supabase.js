@@ -30,7 +30,7 @@
         return new Promise(done=>{
         try{
           const T=DB[table];let data;
-          if(op==="insert"){const r=Object.assign({id:uid(),created_at:new Date().toISOString()},payload);T.push(r);data=sel?r:null;if(single)data=r;}
+          if(op==="insert"){const arr=(Array.isArray(payload)?payload:[payload]).map(x=>Object.assign({id:uid(),created_at:new Date().toISOString()},x));arr.forEach(r=>T.push(r));data=Array.isArray(payload)?arr:(sel||single?arr[0]:null);}
           else{
             let m=T.filter(r=>filters.every(f=>f(r)));
             if(op==="update"){m.forEach(r=>Object.assign(r,payload));data=null;}
