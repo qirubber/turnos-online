@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Turnos</title>
+<meta name="description" content="Reservá tu turno online: elegí profesional, tratamiento y horario disponible.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="styles.css">
+<style>html{padding-top:env(safe-area-inset-top,0px)}body{margin:0;font-size:14px}img{max-width:100%}</style>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="brand"><div class="mark" id="mark">T</div><div class="brand-t"><b id="bizName">Turnos</b><span id="bizSub"></span></div></div>
+  <div class="seg" role="group" aria-label="Modo" id="modeSeg" hidden>
+    <button data-a="mode" data-v="cliente" id="mCli">Cliente</button>
+    <button data-a="mode" data-v="pro" id="mPro">Centro</button>
+  </div>
+</div></header>
+<main class="wrap" id="app"><p class="loading">Cargando…</p></main>
+<div class="foot" id="foot"><a href="#centro" id="lnkCentro">Ingreso del centro</a></div>
+<nav class="bnav" id="bnav" hidden>
+  <button data-a="ctab" data-v="reservar" id="nRes">Reservar turno</button>
+  <button data-a="ctab" data-v="mis" id="nMis">Mis turnos</button>
+</nav>
+<div class="toast" id="toast" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script async src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
