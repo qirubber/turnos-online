@@ -47,6 +47,12 @@ npm i -D playwright
 node tests/ui.test.js
 ```
 
-## Pendiente (paso 3)
-- Bot de WhatsApp que manda el link de reserva y recordatorios automáticos (WhatsApp Business Platform).
-- Cobro automático con Mercado Pago (hoy la seña es por transferencia con confirmación manual).
+## WhatsApp (versión gratuita)
+Panel → pestaña **WhatsApp**: link de reservas, QR para imprimir y textos para las respuestas automáticas de la app WhatsApp Business (mensaje de bienvenida, ausencia y respuestas rápidas /turno y /misturnos). Los recordatorios usan la variable `{link}` con el link privado de “Mis turnos” de cada cliente.
+
+## Mercado Pago (link de cobro)
+En Ajustes → Cobro de señas se puede cargar un link de cobro de Mercado Pago. El cliente ve el botón “Pagar con Mercado Pago”, adjunta el comprobante y el centro confirma la seña.
+
+## Pendiente (más adelante)
+- Recordatorios 100 % automáticos con la API oficial de WhatsApp (WhatsApp Business Platform, cobra por mensaje).
+- Cobro automático con Mercado Pago (Checkout Pro + webhook que confirma la seña solo).

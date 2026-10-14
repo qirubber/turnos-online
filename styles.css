@@ -281,3 +281,10 @@ tr.click{cursor:pointer} tr.click:hover td{background:var(--sunk)}
 .hero-pro{display:flex;gap:10px;align-items:center;background:var(--surface);border-radius:999px;padding:6px 16px 6px 6px}
 .hero-pro b{display:block;font-size:.95rem}
 .hero-pro span{display:block}
+.mp{color:#fff;background:#009ee3;border-color:#009ee3}
+.mp:hover{background:#0089c6;border-color:#0089c6}
+.qrwrap{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.qr{width:148px;height:148px;flex:none;background:#fff;border-radius:10px;padding:4px;border:1px solid var(--line)}
+.qr svg{width:100%;height:100%;display:block}
+.watxt{display:flex;flex-direction:column;gap:8px;padding-top:12px;border-top:1px solid var(--line)}
+.pasos{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:.92rem}

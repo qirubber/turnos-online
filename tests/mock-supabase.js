@@ -17,6 +17,8 @@
       {id:uid(),categoria:"Faciales",nombre:"Limpieza facial profunda",descripcion:"Extracción.",duracion:60,preparacion:10,precio:28000,sena:30,activo:true,prof_ids:[P1],equipo:"",restringir:false,dias:[1,2,3,4,5,6],desde:"09:00:00",hasta:"20:00:00",orden:3}],
     bloqueos:[],clientes:[],turnos:[],pagos:[],paquetes:[],ventas:[],espera:[],notifs:[],staff:[]
   };
+  if(window.__MP)DB.config[0].mp_link=window.__MP;
+  if(window.__MSG)DB.config[0].mensaje=window.__MSG;
   if(window.__UNA)DB.profesionales.slice(1).forEach(x=>x.activo=false);
   window.__DB=DB;
   let session=null;

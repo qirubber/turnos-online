@@ -85,12 +85,14 @@ function fillTpl(tpl,t){
   const c=cliById(t.clienteId)||{nombre:""};
   return tpl.replace(/\{nombre\}/g,c.nombre.split(" ")[0]).replace(/\{servicio\}/g,t.servicioNombre).replace(/\{fecha\}/g,fechaLarga(t.fecha))
     .replace(/\{hora\}/g,t.hora).replace(/\{negocio\}/g,S.config.negocio).replace(/\{profesional\}/g,proNombre(t.profId))
-    .replace(/\{cancelacion\}/g,String(S.config.cancelMin)).replace(/\{saldo\}/g,$m(saldo(t)));
+    .replace(/\{cancelacion\}/g,String(S.config.cancelMin)).replace(/\{saldo\}/g,$m(saldo(t)))
+    .replace(/\{link\}/g,()=>{const tk=c.token||t.token;return tk?linkMis(tk):linkReservas();});
 }
 function leerTokens(){try{const v=JSON.parse(localStorage.getItem(TOKENS_KEY)||"[]");return Array.isArray(v)?v.filter(x=>x&&/^[0-9a-f-]{36}$/i.test(x)):[];}catch(e){return [];}}
 function guardarToken(tk){if(!tk)return;const l=leerTokens();if(!l.includes(tk))l.unshift(tk);try{localStorage.setItem(TOKENS_KEY,JSON.stringify(l.slice(0,10)));}catch(e){}}
 function quitarToken(tk){try{localStorage.setItem(TOKENS_KEY,JSON.stringify(leerTokens().filter(x=>x!==tk)));}catch(e){}}
 const linkMis=tk=>location.origin+location.pathname+"#mis-"+tk;
+const linkReservas=()=>location.origin+location.pathname;
 
 /* ---------- datos: mapeo de filas ---------- */
 const CFG_COLS={negocio:"negocio",whatsapp:"whatsapp",alias:"alias",cbu:"cbu",titular:"titular",banco:"banco",mpLink:"mp_link",exigirSena:"exigir_sena",cancelMin:"cancel_min",senaHoras:"sena_horas",politica:"politica",ventana:"ventana",anticipacion:"anticipacion",holdHoras:"hold_horas",intervalo:"intervalo",recordatorioHoras:"recordatorio_horas",mensaje:"mensaje",mensajeConfirmacion:"mensaje_confirmacion",logoUrl:"logo_url",bienvenidaTitulo:"bienvenida_titulo",bienvenidaTexto:"bienvenida_texto"};
@@ -157,7 +159,7 @@ async function loadStaff(){
   const [tur,pag,cli,paq,ven,esp,not]=await Promise.all([
     fetchAll(()=>sb.from("turnos").select("*").gte("fecha",desde).order("fecha")),
     fetchAll(()=>sb.from("pagos").select("*").order("created_at")),
-    fetchAll(()=>sb.from("clientes").select("id,nombre,tel,email,notas,credito,created_at").order("nombre")),
+    fetchAll(()=>sb.from("clientes").select("id,nombre,tel,email,notas,credito,token,created_at").order("nombre")),
     fetchAll(()=>sb.from("paquetes").select("*")),
     esAdmin()?fetchAll(()=>sb.from("ventas").select("*")):Promise.resolve([]),
     fetchAll(()=>sb.from("espera").select("*").gte("fecha",hoyS())),
@@ -165,7 +167,7 @@ async function loadStaff(){
   ]);
   const pagosPor={};pag.forEach(p=>{(pagosPor[p.turno_id]=pagosPor[p.turno_id]||[]).push({monto:p.monto,medio:p.medio,tipo:p.tipo,fecha:p.fecha});});
   S.turnos=tur.map(r=>mapTurno(r,pagosPor));
-  S.clientes=cli.map(r=>({id:r.id,nombre:r.nombre,tel:r.tel,email:r.email||"",notas:r.notas||"",credito:r.credito||0,alta:String(r.created_at).slice(0,10),packs:paq.filter(k=>k.cliente_id===r.id).map(mapPack)}));
+  S.clientes=cli.map(r=>({id:r.id,nombre:r.nombre,tel:r.tel,email:r.email||"",notas:r.notas||"",credito:r.credito||0,token:r.token||null,alta:String(r.created_at).slice(0,10),packs:paq.filter(k=>k.cliente_id===r.id).map(mapPack)}));
   S.ventas=ven.map(v=>({id:v.id,clienteId:v.cliente_id,concepto:v.concepto,monto:v.monto,medio:v.medio,fecha:v.fecha}));
   S.espera=esp.map(e=>({id:e.id,clienteId:e.cliente_id,servicioId:e.servicio_id,profId:e.profesional_id||"any",fecha:e.fecha,franja:e.franja||"",creado:Date.parse(e.created_at),avisado:e.avisado?Date.parse(e.avisado):null}));
   S.notifs=not.map(n=>({id:n.id,texto:n.texto,turnoId:n.turno_id,ts:Date.parse(n.created_at),leida:n.leida}));
@@ -400,11 +402,13 @@ function vPago(){
     <p class="small muted">${esc(politicaTxt())}</p>
     <div class="row end"><button class="btn pri" data-a="reservar" ${ui.busy?"disabled":""}>${ui.busy?"Reservando…":btn}</button></div>`;
 }
+function mpUrl(){const u=(S.config.mpLink||"").trim();return /^https:\/\/[^\s"<>]+$/i.test(u)?u:"";}
 function bankBox(){
   const c=S.config;
-  if(!c.alias&&!c.cbu)return '<div class="note"><b>El centro todavía no cargó sus datos bancarios.</b> Escribile por WhatsApp para coordinar la seña.</div>';
+  const mp=mpUrl()?`<div class="row"><a class="btn mp" href="${esc(mpUrl())}" target="_blank" rel="noopener">Pagar con Mercado Pago</a><span class="small muted">Después volvé acá y adjuntá el comprobante.</span></div>`:"";
+  if(!c.alias&&!c.cbu)return mp||'<div class="note"><b>El centro todavía no cargó sus datos bancarios.</b> Escribile por WhatsApp para coordinar la seña.</div>';
   const row=(k,v)=>v?`<dt>${k}</dt><dd>${esc(v)}</dd><button class="btn sm" data-a="copy" data-v="${esc(v)}">Copiar</button>`:"";
-  return `<dl class="bank">${row("Alias",c.alias)}${row("CBU/CVU",c.cbu)}${c.titular?`<dt>Titular</dt><dd>${esc(c.titular)}</dd><span></span>`:""}${c.banco?`<dt>Banco</dt><dd>${esc(c.banco)}</dd><span></span>`:""}</dl>`;
+  return `<dl class="bank">${row("Alias",c.alias)}${row("CBU/CVU",c.cbu)}${c.titular?`<dt>Titular</dt><dd>${esc(c.titular)}</dd><span></span>`:""}${c.banco?`<dt>Banco</dt><dd>${esc(c.banco)}</dd><span></span>`:""}</dl>${mp}`;
 }
 function linkPrivado(t){
   const c=cliById(t.clienteId),tk=(c&&c.token)||t.token;
@@ -489,14 +493,14 @@ function vPro(){
   if(!ui.yo)return `<div class="panel stack" style="max-width:420px;margin:40px auto"><h2>Sin acceso al panel</h2><p class="muted">Tu usuario (${esc(ui.sesion.user.email)}) todavía no está habilitado como personal del centro. Pedile a la administración que te dé acceso.</p><button class="btn" data-a="logout">Cerrar sesión</button></div>`;
   if(!ui.cargado)return ui.errorCarga?`<div class="panel stack"><p class="err">${esc(ui.errorCarga)}</p><button class="btn" data-a="recargar">Reintentar</button></div>`:'<p class="loading">Cargando agenda…</p>';
   const adm=esAdmin();
-  const tabs=[["agenda","Agenda"],["senas","Señas"],["recordatorios","Recordatorios"],["espera","Lista de espera"]].concat(adm?[["ingresos","Ingresos"]]:[]).concat([["clientes","Clientes"]]).concat(adm?[["servicios","Tratamientos"],["disponibilidad","Disponibilidad"],["ajustes","Ajustes"]]:[]);
+  const tabs=[["agenda","Agenda"],["senas","Señas"],["recordatorios","Recordatorios"],["espera","Lista de espera"]].concat(adm?[["ingresos","Ingresos"]]:[]).concat([["clientes","Clientes"]]).concat(adm?[["servicios","Tratamientos"],["disponibilidad","Disponibilidad"],["whatsapp","WhatsApp"],["ajustes","Ajustes"]]:[]);
   if(!tabs.find(t=>t[0]===ui.ptab))ui.ptab="agenda";
   const cnt={senas:S.turnos.filter(t=>t.estado==="por_validar").length,recordatorios:pendientesRecordar().length,espera:S.espera.filter(e=>!e.avisado&&lugaresEspera(e).length).length};
   const nNew=S.notifs.filter(n=>!n.leida).length;
   let h=`<div class="row between" style="margin-bottom:8px"><span class="eyebrow">${esc(ui.yo.nombre||ui.sesion.user.email)} · ${adm?"Administración":"Profesional"}</span><div class="row">${adm?`<button class="btn sm" data-a="notifs" aria-expanded="${ui.notifOpen}">Novedades ${nNew?`<span class="n">${nNew}</span>`:""}</button>`:""}<button class="btn sm ghost" data-a="logout">Salir</button></div></div>`;
   if(ui.notifOpen&&adm)h+=`<div class="list notifs">${S.notifs.length?S.notifs.slice(0,15).map(n=>`<div class="notif ${n.leida?"":"new"}"><span>${esc(n.texto)}</span><time>${relTime(n.ts)}</time></div>`).join(""):'<p class="empty">Sin novedades.</p>'}${nNew?'<div style="padding:8px 14px"><button class="btn sm ghost" data-a="leerTodo">Marcar todo como leído</button></div>':""}</div>`;
   h+='<div class="tabs" role="tablist">'+tabs.map(t=>`<button role="tab" data-a="ptab" data-v="${t[0]}" aria-selected="${ui.ptab===t[0]}">${t[1]}${cnt[t[0]]?`<span class="count">${cnt[t[0]]}</span>`:""}</button>`).join("")+"</div>";
-  const b={agenda:vAgenda,senas:vSenas,recordatorios:vRecordatorios,espera:vEspera,ingresos:vIngresos,clientes:vClientes,servicios:vServicios,disponibilidad:vDisponibilidad,ajustes:vAjustes}[ui.ptab]();
+  const b={agenda:vAgenda,senas:vSenas,recordatorios:vRecordatorios,espera:vEspera,ingresos:vIngresos,clientes:vClientes,servicios:vServicios,disponibilidad:vDisponibilidad,whatsapp:vWhatsApp,ajustes:vAjustes}[ui.ptab]();
   return '<div class="fade">'+h+b+"</div>";
 }
 const filtroPro=t=>ui.agProf==="todos"||t.profId===ui.agProf;
@@ -847,6 +851,50 @@ function vDisponibilidad(){
     <div class="row">${grupos.length?grupos.map(g=>`<span class="chip">${fechaCorta(g.desde)}${g.hasta!==g.desde?" al "+fechaCorta(g.hasta):""} · ${g.hDesde?g.hDesde+"–"+g.hHasta:"todo el día"}${g.profId?" · "+esc(proNombre(g.profId)):" · todo el centro"}${g.motivo?" · "+esc(g.motivo):""}<button data-a="bloqDel" data-v="${g.ids.join(",")}" aria-label="Quitar bloqueo">×</button></span>`).join(""):'<span class="small muted">Ninguno.</span>'}</div></section></div>`;
   return html;
 }
+function textosWa(){
+  const n=S.config.negocio||"el centro",l=linkReservas();
+  return [
+    ["bienvenida","Mensaje de bienvenida","Lo recibe automáticamente quien escribe por primera vez (o después de 14 días sin escribir).",
+     `¡Hola! Gracias por escribir a ${n}.\nPodés reservar tu turno acá, con los horarios disponibles en el momento:\n${l}\nSi tenés una consulta, escribila y te respondemos a la brevedad.`],
+    ["ausencia","Mensaje de ausencia","Se envía fuera del horario de atención que configures en WhatsApp Business.",
+     `¡Hola! En este momento no podemos responder, pero podés reservar tu turno las 24 horas acá:\n${l}\nTe contestamos apenas volvamos.`],
+    ["turno","Respuesta rápida /turno","Para mandar el link escribiendo /turno en cualquier chat.",
+     `Reservá tu turno acá y elegí el día y horario que mejor te quede:\n${l}`],
+    ["misturnos","Respuesta rápida /misturnos","Para quien quiere cambiar o cancelar un turno.",
+     `Para ver, reprogramar o cancelar tu turno, abrí el link de “Mis turnos” que te llegó al reservar. Se puede cancelar online hasta ${S.config.cancelMin>=60?(S.config.cancelMin/60)+" h":S.config.cancelMin+" minutos"} antes. Si no lo encontrás, avisanos por acá y te lo reenviamos.`]
+  ];
+}
+function vWhatsApp(){
+  const l=linkReservas(),num=S.config.whatsapp;
+  const qr=qrSvg(l);
+  return `<div class="stack"><div><h2>WhatsApp</h2><p class="muted">Todo listo para usar con la app gratuita de WhatsApp Business: el link de reservas, un QR para el local y las respuestas automáticas.</p></div>
+    <section class="panel stack"><h3>Link de reservas</h3>
+      <div class="linkbox"><code>${esc(l)}</code><button class="btn sm" data-a="copy" data-v="${esc(l)}">Copiar</button></div>
+      <div class="qrwrap">${qr?`<div class="qr">${qr}</div>`:""}<div class="stack" style="gap:8px;min-width:0">
+        <p class="small muted">Ponelo en la bio de Instagram, en el perfil de WhatsApp Business (campo “Sitio web”) o imprimí el QR para el mostrador.</p>
+        <div class="row">${qr?'<button class="btn sm" data-a="qrBajar">Descargar QR</button>':""}${num?`<a class="btn sm wa" href="${esc(waLink(num,"Reservá tu turno en "+(S.config.negocio||"el centro")+": "+l))}" target="_blank" rel="noopener">Probar en WhatsApp</a>`:""}</div></div></div></section>
+    <section class="panel stack"><div><h3>Respuestas automáticas</h3><p class="small muted">Copiá cada texto y pegalo en WhatsApp Business → <b>Herramientas para la empresa</b>. Así, cuando un cliente escribe, recibe el link al instante y reserva solo.</p></div>
+      ${textosWa().map(([k,t,d,m])=>`<div class="watxt"><div class="row between"><div style="min-width:0"><b>${t}</b><br><span class="small muted">${d}</span></div><button class="btn sm" data-a="copy" data-v="${esc(m)}">Copiar</button></div><div class="msg">${esc(m)}</div></div>`).join("")}</section>
+    <section class="panel stack"><h3>Cómo activarlo</h3><ol class="pasos">
+      <li>Instalá <b>WhatsApp Business</b> en el celular del centro (es gratis) con el número ${num?`<span class="mono">+${esc(num)}</span>`:"del centro"}.</li>
+      <li>Entrá a <b>Herramientas para la empresa → Mensaje de bienvenida</b>, activalo y pegá el primer texto.</li>
+      <li>En <b>Mensaje de ausencia</b>, activalo, elegí “Fuera del horario comercial” y pegá el segundo texto.</li>
+      <li>En <b>Respuestas rápidas</b>, creá /turno y /misturnos con los últimos dos textos.</li>
+      <li>Los recordatorios, confirmaciones de seña y avisos de lista de espera se mandan desde las pestañas del panel con el botón verde: se abre WhatsApp con el mensaje escrito y solo tocás enviar.</li></ol>
+      <p class="small muted">Más adelante, si el volumen lo justifica, se puede pasar a la API oficial de WhatsApp para que los recordatorios salgan solos, sin tocar nada.</p></section></div>`;
+}
+function qrSvg(texto){
+  if(typeof window.qrcode!=="function")return "";
+  try{const q=window.qrcode(0,"M");q.addData(texto);q.make();return q.createSvgTag({cellSize:5,margin:2,scalable:true});}catch(e){return "";}
+}
+function bajarQr(){
+  if(typeof window.qrcode!=="function")return toast("No se pudo generar el QR");
+  const q=window.qrcode(0,"M");q.addData(linkReservas());q.make();
+  const n=q.getModuleCount(),cel=16,m=4,tam=(n+m*2)*cel,cv=document.createElement("canvas");cv.width=cv.height=tam;
+  const x=cv.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,tam,tam);x.fillStyle="#000";
+  for(let r=0;r<n;r++)for(let c=0;c<n;c++)if(q.isDark(r,c))x.fillRect((c+m)*cel,(r+m)*cel,cel,cel);
+  const a=document.createElement("a");a.href=cv.toDataURL("image/png");a.download="qr-reservas.png";document.body.appendChild(a);a.click();a.remove();
+}
 function vAjustes(){
   const c=S.config;
   const txt=(k,l,type,help,ph)=>`<label class="f"><span>${l}${help?` <small>${help}</small>`:""}</span><input type="${type||"text"}" id="cfg_${k}" data-c="cfg" data-k="${k}" value="${esc(c[k])}" ${ph?`placeholder="${esc(ph)}"`:""}></label>`;
@@ -860,15 +908,16 @@ function vAjustes(){
       <label class="f">Texto<textarea id="cfg_bienvenidaTexto" data-c="cfg" data-k="bienvenidaTexto" placeholder="${esc(textoBienvenida().texto)}" style="min-height:64px">${esc(c.bienvenidaTexto)}</textarea></label></section>
     <section class="panel stack"><h3>Cobro de señas</h3>
       <div class="fgrid">${txt("alias","Alias")}${txt("cbu","CBU / CVU")}${txt("titular","Titular de la cuenta")}${txt("banco","Banco o billetera")}</div>
+      <div class="fgrid">${txt("mpLink","Link de cobro de Mercado Pago","url","Opcional","https://link.mercadopago.com.ar/…")}</div>
       <label class="switch"><input type="checkbox" id="cfg_exigir" data-c="cfg" data-k="exigirSena" data-b="1" ${c.exigirSena?"checked":""}>Exigir seña para confirmar el turno</label>
-      <p class="small muted">El porcentaje de seña se define en cada tratamiento. El cobro automático con Mercado Pago se conecta en el paso 3.</p></section>
+      <p class="small muted">El porcentaje de seña se define en cada tratamiento. Si cargás un link de cobro de Mercado Pago, el cliente ve un botón para pagar con Mercado Pago además de los datos para transferir. En los dos casos envía el comprobante y el centro confirma la seña.</p></section>
     <section class="panel stack"><h3>Cancelaciones y mensajes</h3><div class="fgrid">
       <label class="f">Cancelación online hasta<select id="cfg_cancel" data-c="cfg" data-k="cancelMin" data-n="1">${[[30,"30 minutos antes"],[60,"1 hora antes"],[120,"2 horas antes"],[1440,"24 horas antes"]].map(v=>`<option value="${v[0]}" ${c.cancelMin===v[0]?"selected":""}>${v[1]}</option>`).join("")}</select></label>
       <label class="f">Enviar recordatorio<select id="cfg_rec" data-c="cfg" data-k="recordatorioHoras" data-n="1">${[[2,"2 horas antes"],[12,"12 horas antes"],[24,"24 horas antes"],[48,"48 horas antes"]].map(v=>`<option value="${v[0]}" ${c.recordatorioHoras===v[0]?"selected":""}>${v[1]}</option>`).join("")}</select></label>
       <label class="f">Lo pagado queda a favor si cancela con<select id="cfg_senaH" data-c="cfg" data-k="senaHoras" data-n="1">${[[2,"2 horas o más"],[12,"12 horas o más"],[24,"24 horas o más"],[48,"48 horas o más"]].map(v=>`<option value="${v[0]}" ${c.senaHoras===v[0]?"selected":""}>${v[1]}</option>`).join("")}</select></label>
       <label class="f">Si cancela más tarde o no viene<select id="cfg_pol" data-c="cfg" data-k="politica">${[["pierde","Pierde la seña y la sesión del paquete"],["favor","Lo pagado igual queda a favor"]].map(v=>`<option value="${v[0]}" ${c.politica===v[0]?"selected":""}>${v[1]}</option>`).join("")}</select></label></div>
       <p class="small muted">Así lo ve el cliente: “${esc(politicaTxt())}”</p>
-      <p class="small muted">Variables: {nombre} {servicio} {profesional} {fecha} {hora} {negocio} {cancelacion} {saldo}</p>
+      <p class="small muted">Variables: {nombre} {servicio} {profesional} {fecha} {hora} {negocio} {cancelacion} {saldo} {link}. <b>{link}</b> es el link privado del cliente para ver, reprogramar o cancelar sus turnos.</p>
       <label class="f">Recordatorio del turno<textarea id="cfg_msg" data-c="cfg" data-k="mensaje">${esc(c.mensaje)}</textarea></label>
       <label class="f">Confirmación de seña<textarea id="cfg_msg2" data-c="cfg" data-k="mensajeConfirmacion">${esc(c.mensajeConfirmacion)}</textarea></label></section>
     <section class="panel stack"><h3>Acceso del personal</h3><p class="small muted">Los usuarios del centro se crean en Supabase (Authentication → Users) y después se habilitan como administración o profesional. Pedíselo a quien administra el sistema.</p></section>
@@ -996,6 +1045,7 @@ const A={
   nueva:()=>{ui.done=null;ui.step=pasos()[0];ui.ctab="reservar";},
   verMis:()=>{ui.done=null;ui.ctab="mis";},
   verDone:v=>{ui.done=v;ui.ctab="reservar";ui.comp=null;},
+  qrBajar:()=>bajarQr(),
   copy:v=>{const fb=()=>toast("Seleccioná y copiá: "+v);try{navigator.clipboard.writeText(v).then(()=>toast("Copiado"),fb);}catch(e){fb();}},
   enviarComp:async v=>{const t=misTurno(v);if(!t||!ui.comp)return;ui.busy=true;render();
     try{const path=`${t.id}/${uuid()}.${ui.comp.ext||"jpg"}`;
@@ -1129,6 +1179,7 @@ document.addEventListener("change",async e=>{
       if(el.getAttribute("data-b"))val=el.checked;
       else if(el.getAttribute("data-n"))val=+v;
       else if(k==="whatsapp")val=digits(v);
+      else if(k==="mpLink"){val=v.trim();if(val&&!/^https:\/\/[^\s"<>]+$/i.test(val)){toast("El link tiene que empezar con https://");return;}}
       else val=v;
       await upd("config",null,{[CFG_COLS[k]]:val,updated_at:new Date().toISOString()});
       S.config[k]=val;toast("Guardado");
@@ -1299,4 +1350,5 @@ async function iniciar(){
   setInterval(()=>{if(ui.mode==="cliente"&&!document.hidden)loadOcupados().then(()=>{const a=document.activeElement;if(!(a&&a.matches("input,select,textarea")))render();}).catch(()=>{});},60000);
 }
 iniciar();
+window.__qrListo=()=>{if(ui&&ui.mode==="pro"&&ui.ptab==="whatsapp")render();};
 })();
