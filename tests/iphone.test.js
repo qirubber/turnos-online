@@ -1,0 +1,20 @@
+const { chromium, devices } = require('playwright');const fs=require('fs');
+(async()=>{const b=await chromium.launch();
+const ctx=await b.newContext({...devices['iPhone 13']});const p=await ctx.newPage();const errs=[];p.on('pageerror',e=>errs.push(e.message));
+await p.route('**/*',r=>{const u=r.request().url();if(u.includes('supabase-js'))return r.fulfill({body:fs.readFileSync('tests/mock-supabase.js','utf8'),contentType:'application/javascript'});if(u.startsWith('http://app.local/')){const f=u.replace('http://app.local/','').split('#')[0]||'index.html';return r.fulfill({body:fs.readFileSync(f),contentType:f.endsWith('.js')?'application/javascript':f.endsWith('.css')?'text/css':f.endsWith('.png')?'image/png':'text/html'});}return r.abort();});
+const sw=async l=>{const w=await p.evaluate(()=>document.documentElement.scrollWidth);if(w>390)console.log('OVERFLOW',l,w);};
+await p.goto('http://app.local/index.html');await p.waitForSelector('[data-a=pickPro]');
+await p.click('[data-a=ctab][data-v=mis]');await p.waitForSelector('#pegaLink');await sw('mis vacio');await p.screenshot({path:'/tmp/claude-0/-home-claude/089651ef-7cb0-5ee1-9cb0-4851b92e1185/scratchpad/m-mis.png'});
+await p.fill('#pegaLink','hola');await p.click('form[data-f=pegarLink] button');await p.waitForTimeout(150);console.log('invalido:',await p.locator('#toast').innerText());
+await p.fill('#pegaLink','https://x.dev/#mis-11111111-2222-3333-4444-555555555555');await p.click('form[data-f=pegarLink] button');await p.waitForTimeout(300);console.log('valido sin turnos:',await p.locator('#toast').innerText());
+await p.click('[data-a=ctab][data-v=reservar]');
+await p.click('[data-a=pickPro][data-v=any]');await sw('servicios');await p.screenshot({path:'/tmp/claude-0/-home-claude/089651ef-7cb0-5ee1-9cb0-4851b92e1185/scratchpad/m-svc.png'});
+await p.click('[data-a=pickSvc] >> nth=0');await sw('calendario');await p.screenshot({path:'/tmp/claude-0/-home-claude/089651ef-7cb0-5ee1-9cb0-4851b92e1185/scratchpad/m-cal.png'});
+await p.click('.day.ok');await p.click('.slot');await p.click('[data-a=step][data-v=datos]');
+await p.fill('#fNombre','Prueba Uno');await p.fill('#fTel','1155559999');await p.click('form[data-f=datos] button[type=submit]');await sw('pago');await p.click('[data-a=reservar]');await p.waitForSelector('.ticket');await sw('ticket');
+await p.click('.inst [data-a=instalar]');await p.waitForSelector('#hojaIOS');console.log('copiar link en hoja:',await p.locator('#hojaIOS [data-a=copy]').count());await p.screenshot({path:'/tmp/claude-0/-home-claude/089651ef-7cb0-5ee1-9cb0-4851b92e1185/scratchpad/m-hoja.png'});await p.click('#hojaIOS .btn.pri');
+await p.click('#lnkCentro').catch(()=>{});await p.evaluate(()=>location.hash='centro');await p.waitForTimeout(300);
+await p.fill('#lgEmail','a@b.com');await p.fill('#lgPass','clave123');await p.click('form[data-f=login] button[type=submit]');await p.waitForSelector('.tabs');
+for(const t of ['agenda','senas','recordatorios','clientes','servicios','disponibilidad','whatsapp','ajustes','ingresos']){await p.click('[data-a=ptab][data-v='+t+']');await p.waitForTimeout(120);await sw(t);}
+await p.click('[data-a=ptab][data-v=agenda]');await p.screenshot({path:'/tmp/claude-0/-home-claude/089651ef-7cb0-5ee1-9cb0-4851b92e1185/scratchpad/m-agenda.png'});
+console.log('errs',errs);await b.close();})();

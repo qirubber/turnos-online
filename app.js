@@ -414,11 +414,43 @@ function linkPrivado(t){
   const c=cliById(t.clienteId),tk=(c&&c.token)||t.token;
   return `<div class="stack" style="gap:6px"><b class="small">Tu link de “Mis turnos”</b><div class="linkbox"><code>${esc(linkMis(tk))}</code><button class="btn sm" data-a="copy" data-v="${esc(linkMis(tk))}">Copiar</button></div><p class="small muted">Guardalo: con este link ves, reprogramás o cancelás tus turnos desde cualquier celular. No lo compartas.</p></div>`;
 }
+/* ---------- app instalable ---------- */
+const INST_KEY="turnero-instalar-oculto";
+let instEvento=null;
+const esStandalone=()=>{try{return matchMedia("(display-mode: standalone)").matches||navigator.standalone===true;}catch(e){return false;}};
+const esIOS=()=>/iphone|ipad|ipod/i.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
+const puedeInstalar=()=>!esStandalone()&&(!!instEvento||esIOS());
+const instOculto=()=>{try{return localStorage.getItem(INST_KEY)==="1";}catch(e){return false;}};
+function vInstalar(){
+  if(!puedeInstalar()||instOculto())return "";
+  return `<div class="note inst"><span class="inst-ic"><img src="icons/icon-192.png" alt=""></span><span style="min-width:0"><b>Instalá la app</b><br><span class="small muted">Entrá a tus turnos con un toque desde la pantalla de inicio, sin buscar el link.</span></span><span class="row"><button class="btn sm pri" data-a="instalar">Instalar</button><button class="btn sm ghost" data-a="instalarNo">Ahora no</button></span></div>`;
+}
+function hojaIOS(){
+  cerrarHoja();
+  const d=document.createElement("div");d.className="hoja-fondo";d.id="hojaIOS";
+  const cli=S.clientes.find(c=>c.token),tkIOS=(cli&&cli.token)||leerTokens()[0]||"";
+  const comp='<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" style="vertical-align:-3px"><path d="M12 3v12M7.5 7.5 12 3l4.5 4.5M5 11v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  d.innerHTML=`<div class="hoja" role="dialog" aria-modal="true" aria-labelledby="hojaT"><div class="row between"><h3 id="hojaT">Instalar en iPhone</h3><button class="btn sm ghost" data-a="hojaCerrar" aria-label="Cerrar">✕</button></div>
+    ${tkIOS?`<div class="note stack" style="gap:8px"><span><b>Antes de instalar, copiá tu link.</b> En iPhone la app guarda sus datos aparte de Safari: la primera vez que la abras, pegalo en “Mis turnos” para ver tus reservas.</span><div class="row"><button class="btn sm" data-a="copy" data-v="${esc(linkMis(tkIOS))}">Copiar mi link</button></div></div>`:""}
+    <ol class="pasos"><li>Tocá el botón <b>Compartir</b> ${comp} en la barra de Safari (abajo o arriba).</li><li>Deslizá y elegí <b>“Agregar a inicio”</b>.</li><li>Tocá <b>Agregar</b>. Listo: el ícono queda en tu pantalla de inicio.</li></ol>
+    <p class="small muted">Si no ves la opción, abrí este link en Safari.</p><div class="row end"><button class="btn pri" data-a="hojaCerrar">Entendido</button></div></div>`;
+  d.addEventListener("click",e=>{if(e.target===d)cerrarHoja();});
+  document.body.appendChild(d);
+}
+function cerrarHoja(){const h=document.getElementById("hojaIOS");if(h)h.remove();}
+async function instalar(){
+  if(instEvento){const ev=instEvento;instEvento=null;try{ev.prompt();const r=await ev.userChoice;if(r&&r.outcome==="accepted")toast("¡Listo! La app quedó instalada");}catch(e){}render();return;}
+  if(esIOS())return hojaIOS();
+  toast("Abrí el menú del navegador y elegí “Instalar app” o “Agregar a pantalla de inicio”");
+}
+window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();instEvento=e;if(S.config)render();});
+window.addEventListener("appinstalled",()=>{instEvento=null;if(S.config)render();});
+if("serviceWorker" in navigator&&location.protocol==="https:")window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
 function vDone(){
   const t=misTurno(ui.done);if(!t){ui.done=null;return vReservar();}
   const c=cliById(t.clienteId)||{nombre:"",tel:""};
   const head=(cls,eyebrow)=>`<div class="ticket-h ${cls}"><div class="eyebrow" style="color:inherit;opacity:.8">${eyebrow}</div><div class="when">${esc(fechaLarga(t.fecha))}</div><div class="mono" style="font-size:1.2rem">${t.hora} hs · ${t.duracion} min</div><div class="small" style="margin-top:4px">${esc(t.servicioNombre)} con ${esc(proNombre(t.profId))}</div></div>`;
-  const wrap=x=>`<div class="fade" style="max-width:600px;margin:0 auto">${x}</div>`;
+  const wrap=x=>`<div class="fade stack" style="max-width:600px;margin:0 auto">${x}${vInstalar()}</div>`;
   if(t.estado==="pendiente_pago"){
     const msg=`Hola! Soy ${c.nombre}. Reservé ${t.servicioNombre} el ${fechaLarga(t.fecha)} a las ${t.hora} hs y transferí ${$m(t.senaMonto)}. Te envío el comprobante.`;
     return wrap(`<div class="ticket">${head("wait","Horario reservado · falta la seña")}
@@ -448,8 +480,9 @@ function vDone(){
     <div class="row"><button class="btn pri" data-a="nueva">Reservar otro turno</button><button class="btn" data-a="verMis">Ver mis turnos</button></div></div></div>`);
 }
 function vMis(){
-  const head=`<div class="stack" style="max-width:640px;margin:0 auto"><div><h2>Mis turnos</h2></div>`;
-  if(!S.misTurnos.length&&!S.misEspera.length)return head+`<div class="panel stack"><p>No encontramos turnos guardados en este dispositivo.</p><p class="small muted">Abrí el link de “Mis turnos” que te dimos al reservar. Si no lo tenés, escribile al centro por WhatsApp${S.config.whatsapp?` al <span class="mono">+${esc(S.config.whatsapp)}</span>`:""}.</p><div class="row"><button class="btn pri" data-a="ctab" data-v="reservar">Reservar un turno</button></div></div></div>`;
+  const head=`<div class="stack" style="max-width:640px;margin:0 auto"><div><h2>Mis turnos</h2></div>${vInstalar()}`;
+  if(!S.misTurnos.length&&!S.misEspera.length)return head+`<div class="panel stack"><p>No encontramos turnos guardados en este dispositivo.</p><p class="small muted">Abrí el link de “Mis turnos” que te dimos al reservar, o pegalo acá. Si no lo tenés, escribile al centro por WhatsApp${S.config.whatsapp?` al <span class="mono">+${esc(S.config.whatsapp)}</span>`:""}.</p>
+    <form class="pega" data-f="pegarLink"><input type="text" inputmode="url" id="pegaLink" placeholder="Pegá tu link de Mis turnos" autocomplete="off" aria-label="Link de Mis turnos"><button class="btn" type="submit">Ver mis turnos</button></form><div class="row"><button class="btn pri" data-a="ctab" data-v="reservar">Reservar un turno</button></div></div></div>`;
   const ahora=ahoraAR();
   const ts=S.misTurnos.slice().sort((a,b)=>startOf(b)-startOf(a));
   const prox=ts.filter(t=>ACTIVOS.includes(t.estado)&&startOf(t)>ahora).reverse();
@@ -497,7 +530,7 @@ function vPro(){
   if(!tabs.find(t=>t[0]===ui.ptab))ui.ptab="agenda";
   const cnt={senas:S.turnos.filter(t=>t.estado==="por_validar").length,recordatorios:pendientesRecordar().length,espera:S.espera.filter(e=>!e.avisado&&lugaresEspera(e).length).length};
   const nNew=S.notifs.filter(n=>!n.leida).length;
-  let h=`<div class="row between" style="margin-bottom:8px"><span class="eyebrow">${esc(ui.yo.nombre||ui.sesion.user.email)} · ${adm?"Administración":"Profesional"}</span><div class="row">${adm?`<button class="btn sm" data-a="notifs" aria-expanded="${ui.notifOpen}">Novedades ${nNew?`<span class="n">${nNew}</span>`:""}</button>`:""}<button class="btn sm ghost" data-a="logout">Salir</button></div></div>`;
+  let h=`<div class="row between" style="margin-bottom:8px"><span class="eyebrow">${esc(ui.yo.nombre||ui.sesion.user.email)} · ${adm?"Administración":"Profesional"}</span><div class="row">${adm?`<button class="btn sm" data-a="notifs" aria-expanded="${ui.notifOpen}">Novedades ${nNew?`<span class="n">${nNew}</span>`:""}</button>`:""}${puedeInstalar()?'<button class="btn sm" data-a="instalar">Instalar app</button>':""}<button class="btn sm ghost" data-a="logout">Salir</button></div></div>`;
   if(ui.notifOpen&&adm)h+=`<div class="list notifs">${S.notifs.length?S.notifs.slice(0,15).map(n=>`<div class="notif ${n.leida?"":"new"}"><span>${esc(n.texto)}</span><time>${relTime(n.ts)}</time></div>`).join(""):'<p class="empty">Sin novedades.</p>'}${nNew?'<div style="padding:8px 14px"><button class="btn sm ghost" data-a="leerTodo">Marcar todo como leído</button></div>':""}</div>`;
   h+='<div class="tabs" role="tablist">'+tabs.map(t=>`<button role="tab" data-a="ptab" data-v="${t[0]}" aria-selected="${ui.ptab===t[0]}">${t[1]}${cnt[t[0]]?`<span class="count">${cnt[t[0]]}</span>`:""}</button>`).join("")+"</div>";
   const b={agenda:vAgenda,senas:vSenas,recordatorios:vRecordatorios,espera:vEspera,ingresos:vIngresos,clientes:vClientes,servicios:vServicios,disponibilidad:vDisponibilidad,whatsapp:vWhatsApp,ajustes:vAjustes}[ui.ptab]();
@@ -934,7 +967,7 @@ let faviconActual=null;
 function ponerFavicon(url){
   if(url===faviconActual)return;faviconActual=url;
   let l=document.querySelector('link[rel="icon"]');
-  if(!url){if(l)l.remove();return;}
+  if(!url)url="icons/favicon-32.png";
   if(!l){l=document.createElement("link");l.rel="icon";document.head.appendChild(l);}
   l.href=url;
 }
@@ -954,6 +987,8 @@ function render(){
   document.getElementById("mPro").setAttribute("aria-pressed",ui.mode==="pro");
   document.getElementById("bnav").hidden=ui.mode!=="cliente";
   document.getElementById("foot").hidden=ui.mode!=="cliente"||!!ui.yo;
+  document.getElementById("btnInstalar").hidden=!puedeInstalar();
+  const mt=document.querySelector('meta[name="apple-mobile-web-app-title"]');if(mt&&S.config.negocio)mt.content=S.config.negocio.slice(0,30);
   document.getElementById("nRes").setAttribute("aria-current",ui.ctab==="reservar"?"page":"false");
   document.getElementById("nMis").setAttribute("aria-current",ui.ctab==="mis"?"page":"false");
   document.getElementById("app").innerHTML=ui.mode==="pro"?vPro():(ui.ctab==="mis"?vMis():vReservar());
@@ -1046,6 +1081,9 @@ const A={
   verMis:()=>{ui.done=null;ui.ctab="mis";},
   verDone:v=>{ui.done=v;ui.ctab="reservar";ui.comp=null;},
   qrBajar:()=>bajarQr(),
+  instalar:()=>instalar(),
+  instalarNo:()=>{try{localStorage.setItem(INST_KEY,"1");}catch(e){}render();},
+  hojaCerrar:()=>cerrarHoja(),
   copy:v=>{const fb=()=>toast("Seleccioná y copiá: "+v);try{navigator.clipboard.writeText(v).then(()=>toast("Copiado"),fb);}catch(e){fb();}},
   enviarComp:async v=>{const t=misTurno(v);if(!t||!ui.comp)return;ui.busy=true;render();
     try{const path=`${t.id}/${uuid()}.${ui.comp.ext||"jpg"}`;
@@ -1155,6 +1193,7 @@ document.addEventListener("click",e=>{
   });
 });
 document.addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target.matches("tr[data-a]"))e.target.click();});
+document.addEventListener("keydown",e=>{if(e.key==="Escape")cerrarHoja();});
 document.addEventListener("change",async e=>{
   const el=e.target,c=el.getAttribute("data-c");if(!c)return;
   const v=el.value;
@@ -1219,6 +1258,12 @@ document.addEventListener("submit",async e=>{
   e.preventDefault();
   const val=id=>{const n=document.getElementById(id);return n?n.value:"";};
   try{
+    if(k==="pegarLink"){
+      const m=val("pegaLink").match(/mis-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+      if(!m){toast("Ese link no es válido. Copialo completo desde el mensaje del centro.");return;}
+      guardarToken(m[1]);await loadMis();render();
+      toast(S.misTurnos.length||S.misEspera.length?"¡Listo! Ya ves tus turnos":"No encontramos turnos con ese link");return;
+    }
     if(k==="datos"){
       ui.sel.nombre=val("fNombre");ui.sel.tel=val("fTel");ui.sel.email=val("fEmail");
       if(ui.sel.nombre.trim().length<3)ui.formErr="Escribí tu nombre y apellido.";

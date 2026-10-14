@@ -50,6 +50,9 @@ node tests/ui.test.js
 ## WhatsApp (versión gratuita)
 Panel → pestaña **WhatsApp**: link de reservas, QR para imprimir y textos para las respuestas automáticas de la app WhatsApp Business (mensaje de bienvenida, ausencia y respuestas rápidas /turno y /misturnos). Los recordatorios usan la variable `{link}` con el link privado de “Mis turnos” de cada cliente.
 
+## App instalable (PWA)
+`manifest.webmanifest`, `sw.js` e `icons/` hacen que la página se pueda instalar como app (ícono en la pantalla de inicio, pantalla completa). En Android aparece el botón “Instalar app”; en iPhone se muestran los pasos de Safari → Compartir → Agregar a inicio. Para usar el logo del centro en el ícono, reemplazá los PNG de `icons/` (mismos nombres y tamaños).
+
 ## Mercado Pago (link de cobro)
 En Ajustes → Cobro de señas se puede cargar un link de cobro de Mercado Pago. El cliente ve el botón “Pagar con Mercado Pago”, adjunta el comprobante y el centro confirma la seña.
 
